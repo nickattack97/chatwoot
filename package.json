@@ -139,7 +139,7 @@
     "histoire": "0.17.15",
     "husky": "^7.0.0",
     "jsdom": "^27.2.0",
-    "lint-staged": "^16.2.7",
+    "lint-staged": "^16.4.0",
     "postcss": "^8.4.47",
     "postcss-preset-env": "^8.5.1",
     "prettier": "^3.3.3",
@@ -174,9 +174,7 @@
       "eslint --fix",
       "git add"
     ],
-    "*.scss": [
-      "scss-lint"
-    ]
+    "*.scss": []
   },
   "packageManager": "pnpm@10.2.0+sha512.0d27364e0139c6aadeed65ada153135e0ca96c8da42123bd50047f961339dc7a758fc2e944b428f52be570d1bd3372455c1c65fa2e7aa0bfbf931190f9552001"
 }

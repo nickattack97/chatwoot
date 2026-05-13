@@ -45,7 +45,7 @@ const action = computed(() => ({
 <template>
   <BaseAttachmentBubble
     icon="i-ph-video-camera-fill"
-    icon-bg-color="bg-[#2781F6]"
+    icon-bg-color="bg-[#2A3877]"
     sender-translation-key="CONVERSATION.SHARED_ATTACHMENT.MEETING"
     :action="action"
   >
@@ -57,7 +57,14 @@ const action = computed(() => ({
     <div v-if="dyteAuthToken" class="video-call--container">
       <iframe
         :src="meetingLink"
-        allow="camera;microphone;fullscreen;display-capture;picture-in-picture;clipboard-write;"
+        allow="
+          camera;
+          microphone;
+          fullscreen;
+          display-capture;
+          picture-in-picture;
+          clipboard-write;
+        "
       />
       <button
         class="px-4 py-2 text-sm rounded-lg bg-n-solid-3 mt-3"
