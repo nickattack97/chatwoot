@@ -45,6 +45,18 @@ if (isLibraryMode) {
 
 export default defineConfig({
   plugins: plugins,
+  css: {
+    preprocessorOptions: {
+      scss: {
+        api: 'legacy',
+        includePaths: [
+          path.resolve('./app/javascript'),
+          path.resolve('./app/javascript/widget/assets/scss'),
+          path.resolve('./app/javascript/dashboard/assets/scss'),
+        ],
+      },
+    },
+  },
   build: {
     rollupOptions: {
       output: {
