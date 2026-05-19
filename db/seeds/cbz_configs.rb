@@ -56,22 +56,19 @@ CONVERSATION_ATTRIBUTES = [
     attribute_key:          'account_number',
     attribute_display_type: 'text',
     attribute_model:        'conversation_attribute',
-    description:            "Customer's CBZ account number",
   },
   {
     attribute_display_name: 'Branch',
     attribute_key:          'branch',
     attribute_display_type: 'list',
     attribute_model:        'conversation_attribute',
-    description:            'Branch associated with this inquiry',
-    attribute_values:       %w[Head\ Office Harare\ CBD Bulawayo Mutare Gweru Masvingo Chinhoyi Bindura Kariba Victoria\ Falls],
+    attribute_values:       ['Head Office', 'Harare CBD', 'Bulawayo', 'Mutare', 'Gweru', 'Masvingo', 'Chinhoyi', 'Bindura', 'Kariba', 'Victoria Falls'],
   },
   {
     attribute_display_name: 'Product Type',
     attribute_key:          'product_type',
     attribute_display_type: 'list',
     attribute_model:        'conversation_attribute',
-    description:            'CBZ product related to this conversation',
     attribute_values:       ['Current Account', 'Savings Account', 'Fixed Deposit', 'Personal Loan',
                              'Mortgage', 'Business Loan', 'Debit Card', 'Credit Card', 'Internet Banking', 'CBZ Touch'],
   },
@@ -80,14 +77,12 @@ CONVERSATION_ATTRIBUTES = [
     attribute_key:          'reference_number',
     attribute_display_type: 'text',
     attribute_model:        'conversation_attribute',
-    description:            'Transaction or case reference number',
   },
   {
     attribute_display_name: 'Escalated',
     attribute_key:          'escalated',
     attribute_display_type: 'checkbox',
     attribute_model:        'conversation_attribute',
-    description:            'Whether this conversation has been escalated',
   },
 ].freeze
 
@@ -97,14 +92,12 @@ CONTACT_ATTRIBUTES = [
     attribute_key:          'customer_id',
     attribute_display_type: 'text',
     attribute_model:        'contact_attribute',
-    description:            'CBZ internal customer identifier (CIF number)',
   },
   {
     attribute_display_name: 'Account Type',
     attribute_key:          'account_type',
     attribute_display_type: 'list',
     attribute_model:        'contact_attribute',
-    description:            "Customer's primary account type",
     attribute_values:       ['Personal', 'Business', 'Corporate', 'Premium'],
   },
 ].freeze
