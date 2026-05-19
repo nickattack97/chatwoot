@@ -362,7 +362,7 @@ if wa_inbox
   BUSINESS_HOURS.each do |hours|
     wh = wa_inbox.working_hours.find_or_initialize_by(day_of_week: hours[:day_of_week])
     wh.assign_attributes(hours)
-    wh.save!
+    wh.save
   end
 
   day_names = %w[Sunday Monday Tuesday Wednesday Thursday Friday Saturday]
