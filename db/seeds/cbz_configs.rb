@@ -13,7 +13,7 @@
 account = Account.first
 raise "No account found. Complete the onboarding wizard first." unless account
 
-wa_inbox = account.inboxes.joins(:channel).where(channels_whatsapp: {}).first
+wa_inbox = account.inboxes.find_by(channel_type: 'Channel::Whatsapp')
 
 puts "=== CBZ HelpEngine Config Seed ==="
 puts "Account : #{account.name} (id=#{account.id})"
