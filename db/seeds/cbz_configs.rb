@@ -263,7 +263,7 @@ AUTOMATION_RULES = [
   },
 ].compact.freeze
 
-admin_user = account.users.find_by(role: :administrator)
+admin_user = account.account_users.find_by(role: :administrator)&.user
 
 AUTOMATION_RULES.each do |attrs|
   rule = account.automation_rules.find_or_initialize_by(name: attrs[:name])
