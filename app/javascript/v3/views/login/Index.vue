@@ -376,17 +376,22 @@ export default {
       <div v-else-if="!email">
         <div class="flex flex-col gap-4">
           <GoogleOAuthButton v-if="showGoogleOAuth" />
-          <!-- CBZ SSO redirect button -->
+          <!-- Microsoft SSO redirect button (via UserConnect) -->
           <a
             v-if="showUcSsoLogin"
-            href="/auth/uc_sso"
+            href="/uc/sso"
             class="inline-flex justify-center w-full px-4 py-3 items-center bg-n-background dark:bg-n-solid-3 rounded-md shadow-sm ring-1 ring-inset ring-n-container dark:ring-n-container focus:outline-offset-0 hover:bg-n-alpha-2 dark:hover:bg-n-alpha-2"
           >
-            <img
-              :src="globalConfig.logo"
-              class="size-5 object-contain"
-              :alt="globalConfig.installationName"
-            />
+            <svg
+              class="size-5"
+              viewBox="0 0 21 21"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <rect x="0" y="0" width="10" height="10" fill="#F25022" />
+              <rect x="11" y="0" width="10" height="10" fill="#7FBA00" />
+              <rect x="0" y="11" width="10" height="10" fill="#00A4EF" />
+              <rect x="11" y="11" width="10" height="10" fill="#FFB900" />
+            </svg>
             <span class="ml-2 text-base font-medium text-n-slate-12">
               {{ $t('LOGIN.USERCONNECT.SSO_LABEL') }}
             </span>

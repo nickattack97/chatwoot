@@ -24,9 +24,9 @@
     "CREATE_NEW_ACCOUNT": "Create a new account",
     "SUBMIT": "Login",
     "USERCONNECT": {
-      "SSO_LABEL": "Sign in with CBZ SSO",
-      "USERNAME_LABEL": "UserConnect username",
-      "USERNAME_PLACEHOLDER": "Enter your UserConnect username",
+      "SSO_LABEL": "Sign in with Microsoft",
+      "USERNAME_LABEL": "Username",
+      "USERNAME_PLACEHOLDER": "Enter your username",
       "OTP_TITLE": "Two-Factor Verification",
       "OTP_SUBTITLE": "Enter the OTP sent to your registered email address.",
       "OTP_PLACEHOLDER": "Enter OTP",

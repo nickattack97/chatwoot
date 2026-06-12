@@ -11,8 +11,9 @@ Rails.application.routes.draw do
   post 'resend_confirmation', to: 'auth/resend_confirmations#create'
 
   # CBZ UserConnect IAM — SSO redirect (Path 1)
-  get 'auth/uc_sso',      to: 'enterprise/userconnect_auth#sso_initiate'
-  get 'auth/uc_callback', to: 'enterprise/userconnect_auth#sso_callback'
+  # Note: /auth/* is owned by DeviseTokenAuth/OmniAuth middleware, so we use /uc/ prefix
+  get 'uc/sso',        to: 'enterprise/userconnect_auth#sso_initiate'
+  get 'saml-callback', to: 'enterprise/userconnect_auth#sso_callback'
 
   ## renders the frontend paths only if its not an api only server
   if ActiveModel::Type::Boolean.new.cast(ENV.fetch('CW_API_ONLY_SERVER', false))
