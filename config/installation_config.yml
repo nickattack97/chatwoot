@@ -57,6 +57,27 @@
   type: boolean
 # ------- End of Branding Related Config ------- #
 
+# ------- CBZ UserConnect IAM Config ------- #
+- name: UC_BASE_URL
+  value: 'http://192.168.3.173:9700'
+  display_title: 'UserConnect Base URL'
+  description: 'Base URL of the CBZ UserConnect API'
+- name: UC_SYSTEM_ID
+  value: '20031'
+  display_title: 'UserConnect System ID'
+  description: 'The system ID assigned to CBZ HelpEngine in UserConnect'
+- name: UC_SSO_ENABLED
+  value: false
+  display_title: 'UserConnect SSO Login'
+  description: 'Enable the Sign in with CBZ SSO button (Entra ID via UserConnect)'
+  type: boolean
+- name: UC_CREDENTIAL_PROXY_ENABLED
+  value: false
+  display_title: 'UserConnect Credential Proxy'
+  description: 'Enable username/password login proxied through UserConnect'
+  type: boolean
+# ------- End of CBZ UserConnect IAM Config ------- #
+
 # ------- Signup & Account Related Config ------- #
 - name: ENABLE_ACCOUNT_SIGNUP
   display_title: 'Enable Account Signup'

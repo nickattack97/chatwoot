@@ -95,6 +95,8 @@ class DashboardController < ActionController::Base
     methods = ['email']
     methods << 'google_oauth' if GlobalConfigService.load('ENABLE_GOOGLE_OAUTH_LOGIN', 'true').to_s != 'false'
     methods << 'saml' if ChatwootHub.pricing_plan != 'community' && GlobalConfigService.load('ENABLE_SAML_SSO_LOGIN', 'true').to_s != 'false'
+    methods << 'userconnect_sso' if GlobalConfigService.load('UC_SSO_ENABLED', 'false').to_s == 'true'
+    methods << 'userconnect_credentials' if GlobalConfigService.load('UC_CREDENTIAL_PROXY_ENABLED', 'false').to_s == 'true'
     methods
   end
 

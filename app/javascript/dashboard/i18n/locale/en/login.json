@@ -23,6 +23,19 @@
     "FORGOT_PASSWORD": "Forgot your password?",
     "CREATE_NEW_ACCOUNT": "Create a new account",
     "SUBMIT": "Login",
+    "USERCONNECT": {
+      "SSO_LABEL": "Sign in with CBZ SSO",
+      "USERNAME_LABEL": "UserConnect username",
+      "USERNAME_PLACEHOLDER": "Enter your UserConnect username",
+      "OTP_TITLE": "Two-Factor Verification",
+      "OTP_SUBTITLE": "Enter the OTP sent to your registered email address.",
+      "OTP_PLACEHOLDER": "Enter OTP",
+      "OTP_SUBMIT": "Verify",
+      "OTP_BACK": "Back to login",
+      "PASSWORD_EXPIRED": "Your password has expired. Please update it in the CBZ UserConnect portal.",
+      "UNAVAILABLE": "Unable to reach the authentication service. Please try again later.",
+      "AUTH_FAILED": "SSO authentication failed. Please try again."
+    },
     "SAML": {
       "LABEL": "Login via SSO",
       "TITLE": "Initiate Single Sign-on (SSO)",

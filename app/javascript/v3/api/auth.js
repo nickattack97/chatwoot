@@ -103,3 +103,11 @@ export const setNewPassword = async ({
 
 export const resetPassword = async ({ email }) =>
   wootAPI.post('auth/password', { email });
+
+export const ucSignIn = async ({ username, password }) => {
+  return wootAPI.post('api/v1/auth/uc_sign_in', { username, password });
+};
+
+export const ucVerifyOtp = async ({ username, otp }) => {
+  return wootAPI.post('api/v1/auth/uc_verify_otp', { username, otp });
+};

@@ -1,6 +1,7 @@
 <script>
 // utils and composables
-import { login } from '../../api/auth';
+import { login, ucSignIn, ucVerifyOtp } from '../../api/auth';
+import { setAuthCredentials } from 'dashboard/store/utils/api';
 import { mapGetters } from 'vuex';
 import { useAlert } from 'dashboard/composables';
 import { required, email } from '@vuelidate/validators';
@@ -8,6 +9,7 @@ import { useVuelidate } from '@vuelidate/core';
 import { SESSION_STORAGE_KEYS } from 'dashboard/constants/sessionStorage';
 import SessionStorage from 'shared/helpers/sessionStorage';
 import { useBranding } from 'shared/composables/useBranding';
+import { getLoginRedirectURL } from 'v3/helpers/AuthHelper';
 
 // components
 import SimpleDivider from '../../components/Divider/SimpleDivider.vue';
@@ -23,6 +25,7 @@ const ERROR_MESSAGES = {
   'business-account-only': 'LOGIN.OAUTH.BUSINESS_ACCOUNTS_ONLY',
   'saml-authentication-failed': 'LOGIN.SAML.API.ERROR_MESSAGE',
   'saml-not-enabled': 'LOGIN.SAML.API.ERROR_MESSAGE',
+  'uc-authentication-failed': 'LOGIN.USERCONNECT.AUTH_FAILED',
 };
 
 const IMPERSONATION_URL_SEARCH_KEY = 'impersonation';
@@ -54,12 +57,17 @@ export default {
   },
   data() {
     return {
-      // We need to initialize the component with any
-      // properties that will be used in it
       credentials: {
         email: '',
         password: '',
       },
+      ucCredentials: {
+        username: '',
+        password: '',
+      },
+      ucOtp: '',
+      ucOtpRequired: false,
+      ucOtpMessage: '',
       loginApi: {
         message: '',
         showLoading: false,
@@ -100,6 +108,12 @@ export default {
     showSamlLogin() {
       return this.allowedLoginMethods.includes('saml');
     },
+    showUcSsoLogin() {
+      return this.allowedLoginMethods.includes('userconnect_sso');
+    },
+    showUcCredentialsLogin() {
+      return this.allowedLoginMethods.includes('userconnect_credentials');
+    },
   },
   created() {
     if (this.ssoAuthToken) {
@@ -120,12 +134,13 @@ export default {
   },
   methods: {
     getTranslatedMessage(key) {
-      // Avoid dynamic key warning by handling each case explicitly
       switch (key) {
         case 'LOGIN.OAUTH.NO_ACCOUNT_FOUND':
           return this.$t('LOGIN.OAUTH.NO_ACCOUNT_FOUND');
         case 'LOGIN.OAUTH.BUSINESS_ACCOUNTS_ONLY':
           return this.$t('LOGIN.OAUTH.BUSINESS_ACCOUNTS_ONLY');
+        case 'LOGIN.USERCONNECT.AUTH_FAILED':
+          return this.$t('LOGIN.USERCONNECT.AUTH_FAILED');
         case 'LOGIN.API.UNAUTH':
         default:
           return this.$t('LOGIN.API.UNAUTH');
@@ -219,10 +234,68 @@ export default {
       window.location = '/app';
     },
     handleMfaCancel() {
-      // User cancelled MFA, reset state
       this.mfaRequired = false;
       this.mfaToken = null;
       this.credentials.password = '';
+    },
+    async submitUcCredentials() {
+      if (!this.ucCredentials.username || !this.ucCredentials.password) return;
+      this.loginApi.showLoading = true;
+      this.loginApi.hasErrored = false;
+      try {
+        const response = await ucSignIn({
+          username: this.ucCredentials.username,
+          password: this.ucCredentials.password,
+        });
+        if (response.data?.requiresOtp) {
+          this.ucOtpRequired = true;
+          this.ucOtpMessage =
+            response.data.otpMessage ||
+            this.$t('LOGIN.USERCONNECT.OTP_SUBTITLE');
+          this.loginApi.showLoading = false;
+          return;
+        }
+        this.handleUcAuthSuccess(response);
+      } catch (error) {
+        this.loginApi.showLoading = false;
+        this.loginApi.hasErrored = true;
+        this.showAlertMessage(
+          error.response?.data?.error ||
+            this.$t('LOGIN.USERCONNECT.UNAVAILABLE')
+        );
+      }
+    },
+    async submitUcOtp() {
+      if (!this.ucOtp) return;
+      this.loginApi.showLoading = true;
+      try {
+        const response = await ucVerifyOtp({
+          username: this.ucCredentials.username,
+          otp: this.ucOtp,
+        });
+        this.handleUcAuthSuccess(response);
+      } catch (error) {
+        this.loginApi.showLoading = false;
+        this.loginApi.hasErrored = true;
+        this.showAlertMessage(
+          error.response?.data?.error || this.$t('LOGIN.API.UNAUTH')
+        );
+      }
+    },
+    handleUcAuthSuccess(response) {
+      setAuthCredentials(response);
+      const user = response.data?.data;
+      window.location = getLoginRedirectURL({
+        ssoAccountId: this.ssoAccountId,
+        ssoConversationId: this.ssoConversationId,
+        user,
+      });
+    },
+    cancelUcOtp() {
+      this.ucOtpRequired = false;
+      this.ucOtp = '';
+      this.loginApi.showLoading = false;
+      this.loginApi.hasErrored = false;
     },
   },
 };
@@ -273,9 +346,51 @@ export default {
         'animate-wiggle': loginApi.hasErrored,
       }"
     >
-      <div v-if="!email">
+      <!-- UC OTP verification step -->
+      <div v-if="ucOtpRequired" class="space-y-5">
+        <p class="text-sm text-center text-n-slate-11">{{ ucOtpMessage }}</p>
+        <FormInput
+          v-model="ucOtp"
+          name="otp"
+          type="text"
+          :label="$t('LOGIN.USERCONNECT.OTP_TITLE')"
+          :placeholder="$t('LOGIN.USERCONNECT.OTP_PLACEHOLDER')"
+        />
+        <NextButton
+          lg
+          class="w-full"
+          :label="$t('LOGIN.USERCONNECT.OTP_SUBMIT')"
+          :disabled="loginApi.showLoading"
+          :is-loading="loginApi.showLoading"
+          @click="submitUcOtp"
+        />
+        <button
+          type="button"
+          class="w-full text-sm text-center text-n-slate-11 hover:text-n-slate-12"
+          @click="cancelUcOtp"
+        >
+          {{ $t('LOGIN.USERCONNECT.OTP_BACK') }}
+        </button>
+      </div>
+
+      <div v-else-if="!email">
         <div class="flex flex-col gap-4">
           <GoogleOAuthButton v-if="showGoogleOAuth" />
+          <!-- CBZ SSO redirect button -->
+          <a
+            v-if="showUcSsoLogin"
+            href="/auth/uc_sso"
+            class="inline-flex justify-center w-full px-4 py-3 items-center bg-n-background dark:bg-n-solid-3 rounded-md shadow-sm ring-1 ring-inset ring-n-container dark:ring-n-container focus:outline-offset-0 hover:bg-n-alpha-2 dark:hover:bg-n-alpha-2"
+          >
+            <img
+              :src="globalConfig.logo"
+              class="size-5 object-contain"
+              :alt="globalConfig.installationName"
+            />
+            <span class="ml-2 text-base font-medium text-n-slate-12">
+              {{ $t('LOGIN.USERCONNECT.SSO_LABEL') }}
+            </span>
+          </a>
           <div v-if="showSamlLogin" class="text-center">
             <router-link
               to="/app/login/sso"
@@ -291,12 +406,44 @@ export default {
             </router-link>
           </div>
           <SimpleDivider
-            v-if="showGoogleOAuth || showSamlLogin"
+            v-if="showGoogleOAuth || showSamlLogin || showUcSsoLogin"
             :label="$t('COMMON.OR')"
             class="uppercase"
           />
         </div>
-        <form class="space-y-5" @submit.prevent="submitFormLogin">
+
+        <!-- UC credential proxy form -->
+        <form
+          v-if="showUcCredentialsLogin"
+          class="space-y-5"
+          @submit.prevent="submitUcCredentials"
+        >
+          <FormInput
+            v-model="ucCredentials.username"
+            name="uc_username"
+            type="text"
+            :label="$t('LOGIN.USERCONNECT.USERNAME_LABEL')"
+            :placeholder="$t('LOGIN.USERCONNECT.USERNAME_PLACEHOLDER')"
+          />
+          <FormInput
+            v-model="ucCredentials.password"
+            type="password"
+            name="uc_password"
+            :label="$t('LOGIN.PASSWORD.LABEL')"
+            :placeholder="$t('LOGIN.PASSWORD.PLACEHOLDER')"
+          />
+          <NextButton
+            lg
+            type="submit"
+            class="w-full"
+            :label="$t('LOGIN.SUBMIT')"
+            :disabled="loginApi.showLoading"
+            :is-loading="loginApi.showLoading"
+          />
+        </form>
+
+        <!-- Standard email/password form (shown when credential proxy is off) -->
+        <form v-else class="space-y-5" @submit.prevent="submitFormLogin">
           <FormInput
             v-model="credentials.email"
             name="email_address"

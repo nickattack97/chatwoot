@@ -10,6 +10,10 @@ Rails.application.routes.draw do
 
   post 'resend_confirmation', to: 'auth/resend_confirmations#create'
 
+  # CBZ UserConnect IAM — SSO redirect (Path 1)
+  get 'auth/uc_sso',      to: 'enterprise/userconnect_auth#sso_initiate'
+  get 'auth/uc_callback', to: 'enterprise/userconnect_auth#sso_callback'
+
   ## renders the frontend paths only if its not an api only server
   if ActiveModel::Type::Boolean.new.cast(ENV.fetch('CW_API_ONLY_SERVER', false))
     root to: 'api#index'
@@ -395,6 +399,10 @@ Rails.application.routes.draw do
 
       # Frontend API endpoint to trigger SAML authentication flow
       post 'auth/saml_login', to: 'auth#saml_login'
+
+      # CBZ UserConnect IAM — credential proxy (Path 2)
+      post 'auth/uc_sign_in',    to: '/enterprise/userconnect_auth#credential_sign_in'
+      post 'auth/uc_verify_otp', to: '/enterprise/userconnect_auth#credential_verify_otp'
 
       resource :profile, only: [:show, :update] do
         delete :avatar, on: :collection
