@@ -402,8 +402,12 @@ Rails.application.routes.draw do
       post 'auth/saml_login', to: 'auth#saml_login'
 
       # CBZ UserConnect IAM — credential proxy (Path 2)
-      post 'auth/uc_sign_in',    to: '/enterprise/userconnect_auth#credential_sign_in'
-      post 'auth/uc_verify_otp', to: '/enterprise/userconnect_auth#credential_verify_otp'
+      post 'auth/uc_sign_in',                    to: '/enterprise/userconnect_auth#credential_sign_in'
+      post 'auth/uc_verify_otp',                 to: '/enterprise/userconnect_auth#credential_verify_otp'
+      post 'auth/uc_forgot_password',            to: '/enterprise/userconnect_auth#forgot_password'
+      post 'auth/uc_resend_forgot_password_otp', to: '/enterprise/userconnect_auth#resend_forgot_password_otp'
+      put  'auth/uc_change_forgotten_password',  to: '/enterprise/userconnect_auth#change_forgotten_password'
+      put  'auth/uc_change_password',            to: '/enterprise/userconnect_auth#change_password'
 
       resource :profile, only: [:show, :update] do
         delete :avatar, on: :collection

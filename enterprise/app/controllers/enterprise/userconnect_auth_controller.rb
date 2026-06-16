@@ -39,12 +39,8 @@ class Enterprise::UserconnectAuthController < ApplicationController
   rescue UserConnect::AuthService::OtpRequiredError => e
     render json: { requiresOtp: true, otpMessage: e.message }, status: :ok
 
-  rescue UserConnect::AuthService::PasswordChangeRequiredError
-    uc_base = GlobalConfigService.load('UC_BASE_URL', nil)
-    render json: {
-      error: 'Your password has expired. Please update it in the CBZ UserConnect portal.',
-      changePasswordUrl: "#{uc_base}/change-password"
-    }, status: :unauthorized
+  rescue UserConnect::AuthService::PasswordChangeRequiredError => e
+    render json: { requiresPasswordChange: true, changePasswordToken: e.message }, status: :ok
 
   rescue UserConnect::AuthService::UnavailableError => e
     render json: { error: e.message }, status: :service_unavailable
@@ -66,6 +62,73 @@ class Enterprise::UserconnectAuthController < ApplicationController
 
   rescue UserConnect::AuthService::UnauthorizedError => e
     render json: { error: e.message }, status: :unauthorized
+  end
+
+  # POST /api/v1/auth/uc_forgot_password
+  # Body: { username }
+  def forgot_password
+    return render_disabled unless uc_credential_proxy_enabled?
+
+    auth_service.forgot_password(params[:username])
+    render json: { info: 'A reset code has been sent to your registered email.' }, status: :ok
+
+  rescue UserConnect::AuthService::UnavailableError => e
+    render json: { error: e.message }, status: :service_unavailable
+
+  rescue UserConnect::AuthService::UnauthorizedError => e
+    render json: { error: e.message }, status: :unprocessable_entity
+  end
+
+  # POST /api/v1/auth/uc_resend_forgot_password_otp
+  # Body: { username }
+  def resend_forgot_password_otp
+    return render_disabled unless uc_credential_proxy_enabled?
+
+    auth_service.resend_forgot_password_otp(params[:username])
+    render json: { info: 'Reset code resent.' }, status: :ok
+
+  rescue UserConnect::AuthService::UnavailableError => e
+    render json: { error: e.message }, status: :service_unavailable
+
+  rescue UserConnect::AuthService::UnauthorizedError => e
+    render json: { error: e.message }, status: :unprocessable_entity
+  end
+
+  # PUT /api/v1/auth/uc_change_forgotten_password
+  # Body: { username, otp, newPassword, confirmPassword }
+  def change_forgotten_password
+    return render_disabled unless uc_credential_proxy_enabled?
+
+    auth_service.change_forgotten_password(
+      params[:username], params[:otp],
+      params[:newPassword], params[:confirmPassword]
+    )
+    render json: { info: 'Password changed successfully. You can now sign in.' }, status: :ok
+
+  rescue UserConnect::AuthService::UnavailableError => e
+    render json: { error: e.message }, status: :service_unavailable
+
+  rescue UserConnect::AuthService::UnauthorizedError => e
+    render json: { error: e.message }, status: :unprocessable_entity
+  end
+
+  # PUT /api/v1/auth/uc_change_password
+  # Body: { changePasswordToken, newPassword, confirmPassword }
+  def change_password
+    return render_disabled unless uc_credential_proxy_enabled?
+
+    auth_service.change_password(
+      params[:changePasswordToken],
+      params[:newPassword],
+      params[:confirmPassword]
+    )
+    render json: { info: 'Password changed successfully.' }, status: :ok
+
+  rescue UserConnect::AuthService::UnavailableError => e
+    render json: { error: e.message }, status: :service_unavailable
+
+  rescue UserConnect::AuthService::UnauthorizedError => e
+    render json: { error: e.message }, status: :unprocessable_entity
   end
 
   private

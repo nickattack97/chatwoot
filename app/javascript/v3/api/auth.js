@@ -111,3 +111,39 @@ export const ucSignIn = async ({ username, password }) => {
 export const ucVerifyOtp = async ({ username, otp }) => {
   return wootAPI.post('api/v1/auth/uc_verify_otp', { username, otp });
 };
+
+export const ucForgotPassword = async ({ username }) => {
+  return wootAPI.post('api/v1/auth/uc_forgot_password', { username });
+};
+
+export const ucResendForgotPasswordOtp = async ({ username }) => {
+  return wootAPI.post('api/v1/auth/uc_resend_forgot_password_otp', {
+    username,
+  });
+};
+
+export const ucChangeForgottenPassword = async ({
+  username,
+  otp,
+  newPassword,
+  confirmPassword,
+}) => {
+  return wootAPI.put('api/v1/auth/uc_change_forgotten_password', {
+    username,
+    otp,
+    newPassword,
+    confirmPassword,
+  });
+};
+
+export const ucChangePassword = async ({
+  changePasswordToken,
+  newPassword,
+  confirmPassword,
+}) => {
+  return wootAPI.put('api/v1/auth/uc_change_password', {
+    changePasswordToken,
+    newPassword,
+    confirmPassword,
+  });
+};

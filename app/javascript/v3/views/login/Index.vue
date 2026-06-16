@@ -1,6 +1,14 @@
 <script>
 // utils and composables
-import { login, ucSignIn, ucVerifyOtp } from '../../api/auth';
+import {
+  login,
+  ucSignIn,
+  ucVerifyOtp,
+  ucForgotPassword,
+  ucResendForgotPasswordOtp,
+  ucChangeForgottenPassword,
+  ucChangePassword,
+} from '../../api/auth';
 import { setAuthCredentials } from 'dashboard/store/utils/api';
 import { mapGetters } from 'vuex';
 import { useAlert } from 'dashboard/composables';
@@ -68,6 +76,17 @@ export default {
       ucOtp: '',
       ucOtpRequired: false,
       ucOtpMessage: '',
+      // Forced password change (expired/initial login)
+      ucPasswordChangeRequired: false,
+      ucChangePasswordToken: null,
+      ucNewPassword: '',
+      ucConfirmPassword: '',
+      // Forgot password flow
+      ucForgotStep: null, // null | 'username' | 'reset' | 'success'
+      ucForgotUsername: '',
+      ucForgotOtp: '',
+      ucForgotNewPassword: '',
+      ucForgotConfirmPassword: '',
       loginApi: {
         message: '',
         showLoading: false,
@@ -121,12 +140,9 @@ export default {
     }
     if (this.authError) {
       const messageKey = ERROR_MESSAGES[this.authError] ?? 'LOGIN.API.UNAUTH';
-      // Use a method to get the translated text to avoid dynamic key warning
       const translatedMessage = this.getTranslatedMessage(messageKey);
       useAlert(translatedMessage);
-      // wait for idle state
       this.requestIdleCallbackPolyfill(() => {
-        // Remove the error query param from the url
         const { query } = this.$route;
         this.$router.replace({ query: { ...query, error: undefined } });
       });
@@ -146,27 +162,19 @@ export default {
           return this.$t('LOGIN.API.UNAUTH');
       }
     },
-    // TODO: Remove this when Safari gets wider support
-    // Ref: https://caniuse.com/requestidlecallback
-    //
     requestIdleCallbackPolyfill(callback) {
       if (window.requestIdleCallback) {
         window.requestIdleCallback(callback);
       } else {
-        // Fallback for safari
-        // Using a delay of 0 allows the callback to be executed asynchronously
-        // in the next available event loop iteration, similar to requestIdleCallback
         setTimeout(callback, 0);
       }
     },
     showAlertMessage(message) {
-      // Reset loading, current selected agent
       this.loginApi.showLoading = false;
       this.loginApi.message = message;
       useAlert(this.loginApi.message);
     },
     handleImpersonation() {
-      // Detects impersonation mode via URL and sets a session flag to prevent user settings changes during impersonation.
       const urlParams = new URLSearchParams(window.location.search);
       const impersonation = urlParams.get(IMPERSONATION_URL_SEARCH_KEY);
       if (impersonation) {
@@ -189,7 +197,6 @@ export default {
 
       login(credentials)
         .then(result => {
-          // Check if MFA is required
           if (result?.mfaRequired) {
             this.loginApi.showLoading = false;
             this.mfaRequired = true;
@@ -210,7 +217,6 @@ export default {
             return;
           }
 
-          // Reset URL Params if the authentication is invalid
           if (this.email) {
             window.location = '/app/login';
           }
@@ -229,7 +235,6 @@ export default {
       this.submitLogin();
     },
     handleMfaVerified() {
-      // MFA verification successful, continue with login
       this.handleImpersonation();
       window.location = '/app';
     },
@@ -238,6 +243,8 @@ export default {
       this.mfaToken = null;
       this.credentials.password = '';
     },
+
+    // ── UC credentials login ─────────────────────────────────────────────────
     async submitUcCredentials() {
       if (!this.ucCredentials.username || !this.ucCredentials.password) return;
       this.loginApi.showLoading = true;
@@ -252,6 +259,12 @@ export default {
           this.ucOtpMessage =
             response.data.otpMessage ||
             this.$t('LOGIN.USERCONNECT.OTP_SUBTITLE');
+          this.loginApi.showLoading = false;
+          return;
+        }
+        if (response.data?.requiresPasswordChange) {
+          this.ucPasswordChangeRequired = true;
+          this.ucChangePasswordToken = response.data.changePasswordToken;
           this.loginApi.showLoading = false;
           return;
         }
@@ -295,6 +308,140 @@ export default {
       this.ucOtpRequired = false;
       this.ucOtp = '';
       this.loginApi.showLoading = false;
+      this.loginApi.hasErrored = false;
+    },
+
+    // ── Forced password change (expired / initial) ───────────────────────────
+    async submitUcChangePassword() {
+      if (!this.ucNewPassword || !this.ucConfirmPassword) {
+        this.showAlertMessage(this.$t('LOGIN.USERCONNECT.PASSWORD_REQUIRED'));
+        return;
+      }
+      if (this.ucNewPassword !== this.ucConfirmPassword) {
+        this.showAlertMessage(
+          this.$t('LOGIN.USERCONNECT.PASSWORDS_DO_NOT_MATCH')
+        );
+        return;
+      }
+      this.loginApi.showLoading = true;
+      this.loginApi.hasErrored = false;
+      try {
+        await ucChangePassword({
+          changePasswordToken: this.ucChangePasswordToken,
+          newPassword: this.ucNewPassword,
+          confirmPassword: this.ucConfirmPassword,
+        });
+        // Auto-resubmit login with the new password
+        this.ucCredentials.password = this.ucNewPassword;
+        this.ucPasswordChangeRequired = false;
+        this.ucChangePasswordToken = null;
+        this.ucNewPassword = '';
+        this.ucConfirmPassword = '';
+        await this.submitUcCredentials();
+      } catch (error) {
+        this.loginApi.showLoading = false;
+        this.loginApi.hasErrored = true;
+        this.showAlertMessage(
+          error.response?.data?.error ||
+            this.$t('LOGIN.USERCONNECT.UNAVAILABLE')
+        );
+      }
+    },
+    cancelUcChangePassword() {
+      this.ucPasswordChangeRequired = false;
+      this.ucChangePasswordToken = null;
+      this.ucNewPassword = '';
+      this.ucConfirmPassword = '';
+      this.ucCredentials.password = '';
+      this.loginApi.hasErrored = false;
+    },
+
+    // ── Forgot password flow ─────────────────────────────────────────────────
+    openForgotPassword() {
+      this.ucForgotStep = 'username';
+      this.ucForgotUsername = this.ucCredentials.username;
+      this.ucForgotOtp = '';
+      this.ucForgotNewPassword = '';
+      this.ucForgotConfirmPassword = '';
+      this.loginApi.hasErrored = false;
+    },
+    cancelForgotPassword() {
+      this.ucForgotStep = null;
+      this.ucForgotUsername = '';
+      this.ucForgotOtp = '';
+      this.ucForgotNewPassword = '';
+      this.ucForgotConfirmPassword = '';
+      this.loginApi.hasErrored = false;
+    },
+    async submitForgotPasswordUsername() {
+      if (!this.ucForgotUsername) return;
+      this.loginApi.showLoading = true;
+      this.loginApi.hasErrored = false;
+      try {
+        await ucForgotPassword({ username: this.ucForgotUsername });
+        this.ucForgotStep = 'reset';
+        this.loginApi.showLoading = false;
+      } catch (error) {
+        this.loginApi.showLoading = false;
+        this.loginApi.hasErrored = true;
+        this.showAlertMessage(
+          error.response?.data?.error ||
+            this.$t('LOGIN.USERCONNECT.UNAVAILABLE')
+        );
+      }
+    },
+    async resendForgotPasswordOtp() {
+      this.loginApi.showLoading = true;
+      try {
+        await ucResendForgotPasswordOtp({ username: this.ucForgotUsername });
+        this.loginApi.showLoading = false;
+        useAlert(this.$t('LOGIN.USERCONNECT.FORGOT_OTP_RESEND_SUCCESS'));
+      } catch (error) {
+        this.loginApi.showLoading = false;
+        this.showAlertMessage(
+          error.response?.data?.error ||
+            this.$t('LOGIN.USERCONNECT.UNAVAILABLE')
+        );
+      }
+    },
+    async submitForgotPasswordReset() {
+      if (!this.ucForgotNewPassword || !this.ucForgotConfirmPassword) {
+        this.showAlertMessage(this.$t('LOGIN.USERCONNECT.PASSWORD_REQUIRED'));
+        return;
+      }
+      if (this.ucForgotNewPassword !== this.ucForgotConfirmPassword) {
+        this.showAlertMessage(
+          this.$t('LOGIN.USERCONNECT.PASSWORDS_DO_NOT_MATCH')
+        );
+        return;
+      }
+      this.loginApi.showLoading = true;
+      this.loginApi.hasErrored = false;
+      try {
+        await ucChangeForgottenPassword({
+          username: this.ucForgotUsername,
+          otp: this.ucForgotOtp,
+          newPassword: this.ucForgotNewPassword,
+          confirmPassword: this.ucForgotConfirmPassword,
+        });
+        this.ucForgotStep = 'success';
+        // Pre-fill username on the main form so the user can log in straight away
+        this.ucCredentials.username = this.ucForgotUsername;
+        this.loginApi.showLoading = false;
+      } catch (error) {
+        this.loginApi.showLoading = false;
+        this.loginApi.hasErrored = true;
+        this.showAlertMessage(
+          error.response?.data?.error ||
+            this.$t('LOGIN.USERCONNECT.UNAVAILABLE')
+        );
+      }
+    },
+    returnToLoginFromForgot() {
+      this.ucForgotStep = null;
+      this.ucForgotOtp = '';
+      this.ucForgotNewPassword = '';
+      this.ucForgotConfirmPassword = '';
       this.loginApi.hasErrored = false;
     },
   },
@@ -373,6 +520,162 @@ export default {
         </button>
       </div>
 
+      <!-- UC forced password change (expired / initial login) -->
+      <div v-else-if="ucPasswordChangeRequired" class="space-y-5">
+        <div class="space-y-1">
+          <h3 class="text-lg font-medium text-n-slate-12">
+            {{ $t('LOGIN.USERCONNECT.CHANGE_PASSWORD_TITLE') }}
+          </h3>
+          <p class="text-sm text-n-slate-11">
+            {{ $t('LOGIN.USERCONNECT.CHANGE_PASSWORD_EXPIRED_SUBTITLE') }}
+          </p>
+        </div>
+        <FormInput
+          v-model="ucNewPassword"
+          type="password"
+          name="uc_new_password"
+          :label="$t('LOGIN.USERCONNECT.NEW_PASSWORD_LABEL')"
+          :placeholder="$t('LOGIN.USERCONNECT.NEW_PASSWORD_PLACEHOLDER')"
+        />
+        <FormInput
+          v-model="ucConfirmPassword"
+          type="password"
+          name="uc_confirm_password"
+          :label="$t('LOGIN.USERCONNECT.CONFIRM_PASSWORD_LABEL')"
+          :placeholder="$t('LOGIN.USERCONNECT.CONFIRM_PASSWORD_PLACEHOLDER')"
+        />
+        <NextButton
+          lg
+          class="w-full"
+          :label="$t('LOGIN.USERCONNECT.CHANGE_PASSWORD_SUBMIT')"
+          :disabled="loginApi.showLoading"
+          :is-loading="loginApi.showLoading"
+          @click="submitUcChangePassword"
+        />
+        <button
+          type="button"
+          class="w-full text-sm text-center text-n-slate-11 hover:text-n-slate-12"
+          @click="cancelUcChangePassword"
+        >
+          {{ $t('LOGIN.USERCONNECT.OTP_BACK') }}
+        </button>
+      </div>
+
+      <!-- UC forgot password — step 1: enter username -->
+      <div v-else-if="ucForgotStep === 'username'" class="space-y-5">
+        <div class="space-y-1">
+          <h3 class="text-lg font-medium text-n-slate-12">
+            {{ $t('LOGIN.USERCONNECT.FORGOT_PASSWORD_TITLE') }}
+          </h3>
+          <p class="text-sm text-n-slate-11">
+            {{ $t('LOGIN.USERCONNECT.FORGOT_PASSWORD_SUBTITLE') }}
+          </p>
+        </div>
+        <FormInput
+          v-model="ucForgotUsername"
+          name="uc_forgot_username"
+          type="text"
+          :label="$t('LOGIN.USERCONNECT.USERNAME_LABEL')"
+          :placeholder="$t('LOGIN.USERCONNECT.USERNAME_PLACEHOLDER')"
+        />
+        <NextButton
+          lg
+          class="w-full"
+          :label="$t('LOGIN.USERCONNECT.FORGOT_PASSWORD_SUBMIT')"
+          :disabled="loginApi.showLoading || !ucForgotUsername"
+          :is-loading="loginApi.showLoading"
+          @click="submitForgotPasswordUsername"
+        />
+        <button
+          type="button"
+          class="w-full text-sm text-center text-n-slate-11 hover:text-n-slate-12"
+          @click="cancelForgotPassword"
+        >
+          {{ $t('LOGIN.USERCONNECT.FORGOT_PASSWORD_BACK') }}
+        </button>
+      </div>
+
+      <!-- UC forgot password — step 2: enter OTP + new password -->
+      <div v-else-if="ucForgotStep === 'reset'" class="space-y-5">
+        <div class="space-y-1">
+          <h3 class="text-lg font-medium text-n-slate-12">
+            {{ $t('LOGIN.USERCONNECT.FORGOT_OTP_TITLE') }}
+          </h3>
+          <p class="text-sm text-n-slate-11">
+            {{ $t('LOGIN.USERCONNECT.FORGOT_OTP_SUBTITLE') }}
+          </p>
+        </div>
+        <FormInput
+          v-model="ucForgotOtp"
+          name="uc_forgot_otp"
+          type="text"
+          :label="$t('LOGIN.USERCONNECT.FORGOT_OTP_LABEL')"
+          :placeholder="$t('LOGIN.USERCONNECT.FORGOT_OTP_PLACEHOLDER')"
+        />
+        <FormInput
+          v-model="ucForgotNewPassword"
+          type="password"
+          name="uc_forgot_new_password"
+          :label="$t('LOGIN.USERCONNECT.NEW_PASSWORD_LABEL')"
+          :placeholder="$t('LOGIN.USERCONNECT.NEW_PASSWORD_PLACEHOLDER')"
+        />
+        <FormInput
+          v-model="ucForgotConfirmPassword"
+          type="password"
+          name="uc_forgot_confirm_password"
+          :label="$t('LOGIN.USERCONNECT.CONFIRM_PASSWORD_LABEL')"
+          :placeholder="$t('LOGIN.USERCONNECT.CONFIRM_PASSWORD_PLACEHOLDER')"
+        />
+        <NextButton
+          lg
+          class="w-full"
+          :label="$t('LOGIN.USERCONNECT.RESET_PASSWORD_SUBMIT')"
+          :disabled="loginApi.showLoading"
+          :is-loading="loginApi.showLoading"
+          @click="submitForgotPasswordReset"
+        />
+        <div class="flex justify-between text-sm">
+          <button
+            type="button"
+            class="text-n-slate-11 hover:text-n-slate-12"
+            :disabled="loginApi.showLoading"
+            @click="resendForgotPasswordOtp"
+          >
+            {{ $t('LOGIN.USERCONNECT.FORGOT_OTP_RESEND') }}
+          </button>
+          <button
+            type="button"
+            class="text-n-slate-11 hover:text-n-slate-12"
+            @click="cancelForgotPassword"
+          >
+            {{ $t('LOGIN.USERCONNECT.FORGOT_PASSWORD_BACK') }}
+          </button>
+        </div>
+      </div>
+
+      <!-- UC forgot password — step 3: success -->
+      <div v-else-if="ucForgotStep === 'success'" class="space-y-5 text-center">
+        <div
+          class="flex items-center justify-center w-12 h-12 mx-auto rounded-full bg-n-brand/10"
+        >
+          <Icon icon="i-lucide-check" class="size-6 text-n-brand" />
+        </div>
+        <div class="space-y-1">
+          <h3 class="text-lg font-medium text-n-slate-12">
+            {{ $t('LOGIN.USERCONNECT.FORGOT_SUCCESS_TITLE') }}
+          </h3>
+          <p class="text-sm text-n-slate-11">
+            {{ $t('LOGIN.USERCONNECT.FORGOT_SUCCESS_SUBTITLE') }}
+          </p>
+        </div>
+        <NextButton
+          lg
+          class="w-full"
+          :label="$t('LOGIN.SUBMIT')"
+          @click="returnToLoginFromForgot"
+        />
+      </div>
+
       <div v-else-if="!email">
         <div class="flex flex-col gap-4">
           <GoogleOAuthButton v-if="showGoogleOAuth" />
@@ -436,7 +739,17 @@ export default {
             name="uc_password"
             :label="$t('LOGIN.PASSWORD.LABEL')"
             :placeholder="$t('LOGIN.PASSWORD.PLACEHOLDER')"
-          />
+          >
+            <p>
+              <button
+                type="button"
+                class="text-sm text-link"
+                @click.prevent="openForgotPassword"
+              >
+                {{ $t('LOGIN.USERCONNECT.FORGOT_PASSWORD') }}
+              </button>
+            </p>
+          </FormInput>
           <NextButton
             lg
             type="submit"
