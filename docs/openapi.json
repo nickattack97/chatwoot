@@ -1,0 +1,1461 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "CBZ HelpEngine API",
+    "version": "1.0.0",
+    "description": "REST API for CBZ HelpEngine — a customised deployment of Chatwoot for CBZ Bank Limited. All endpoints require token-based authentication via the `api_access_token` header. The account ID for CBZ HelpEngine is `1`.",
+    "contact": {
+      "name": "CBZ IT Core Applications",
+      "email": "itdevelopers@cbz.co.zw"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://192.168.230.54",
+      "description": "UAT / Staging"
+    }
+  ],
+  "security": [
+    {
+      "ApiAccessToken": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "ApiAccessToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "api_access_token",
+        "description": "Permanent per-user API token. Obtain from Settings → Profile → Access Token, or via POST /auth/sign_in."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "example": "You are not authorized to perform this action"
+          }
+        }
+      },
+      "Profile": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 5 },
+          "name": { "type": "string", "example": "Jane Moyo" },
+          "email": { "type": "string", "example": "agent@cbz.co.zw" },
+          "access_token": { "type": "string", "example": "abc123token" },
+          "role": { "type": "string", "enum": ["agent", "administrator"] },
+          "account_id": { "type": "integer", "example": 1 }
+        }
+      },
+      "Contact": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 42 },
+          "name": { "type": "string", "example": "John Doe" },
+          "phone_number": { "type": "string", "example": "+263771234567" },
+          "email": { "type": "string", "example": "john@example.com" },
+          "identifier": { "type": "string", "example": "CIF-00123456", "description": "CBZ CIF number or external system ID" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ContactCreate": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "example": "John Doe" },
+          "phone_number": { "type": "string", "example": "+263771234567" },
+          "email": { "type": "string", "example": "john@example.com" },
+          "identifier": { "type": "string", "example": "CIF-00123456" }
+        }
+      },
+      "Conversation": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 101 },
+          "status": { "type": "string", "enum": ["open", "resolved", "pending", "snoozed"], "example": "open" },
+          "inbox_id": { "type": "integer", "example": 1 },
+          "assignee_id": { "type": "integer", "nullable": true, "example": 5 },
+          "team_id": { "type": "integer", "nullable": true, "example": 2 },
+          "contact": { "$ref": "#/components/schemas/Contact" },
+          "additional_attributes": { "type": "object", "example": { "account_number": "1234567890" } },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ConversationCreate": {
+        "type": "object",
+        "required": ["inbox_id", "contact_id"],
+        "properties": {
+          "inbox_id": { "type": "integer", "example": 1 },
+          "contact_id": { "type": "integer", "example": 42 },
+          "assignee_id": { "type": "integer", "example": 5 },
+          "team_id": { "type": "integer", "example": 2 },
+          "additional_attributes": {
+            "type": "object",
+            "example": { "account_number": "1234567890", "reference_number": "TXN-98765" }
+          }
+        }
+      },
+      "Message": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 501 },
+          "content": { "type": "string", "example": "Hello, how can I help you?" },
+          "message_type": { "type": "string", "enum": ["incoming", "outgoing", "activity", "template"] },
+          "private": { "type": "boolean", "description": "True for internal agent notes not visible to the customer", "example": false },
+          "created_at": { "type": "integer", "description": "Unix timestamp", "example": 1747648800 }
+        }
+      },
+      "MessageCreate": {
+        "type": "object",
+        "required": ["content", "message_type"],
+        "properties": {
+          "content": { "type": "string", "example": "Your loan application has been received." },
+          "message_type": { "type": "string", "enum": ["outgoing"], "example": "outgoing" },
+          "private": { "type": "boolean", "default": false, "description": "Set true to create an internal note (not sent to customer)" }
+        }
+      },
+      "Agent": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 5 },
+          "name": { "type": "string", "example": "Jane Moyo" },
+          "email": { "type": "string", "example": "agent@cbz.co.zw" },
+          "role": { "type": "string", "enum": ["agent", "administrator"] },
+          "availability_status": { "type": "string", "enum": ["online", "busy", "offline"] }
+        }
+      },
+      "AgentCreate": {
+        "type": "object",
+        "required": ["name", "email", "role"],
+        "properties": {
+          "name": { "type": "string", "example": "Jane Moyo" },
+          "email": { "type": "string", "example": "agent@cbz.co.zw" },
+          "role": { "type": "string", "enum": ["agent", "administrator"] }
+        }
+      },
+      "Inbox": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 1 },
+          "name": { "type": "string", "example": "WhatsApp Support" },
+          "channel_type": { "type": "string", "example": "Channel::Whatsapp" },
+          "phone_number": { "type": "string", "example": "+263788170276" },
+          "greeting_enabled": { "type": "boolean" },
+          "working_hours_enabled": { "type": "boolean" }
+        }
+      },
+      "Team": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 2 },
+          "name": { "type": "string", "example": "Card Services" },
+          "description": { "type": "string", "example": "Handles debit and credit card queries" }
+        }
+      },
+      "Webhook": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 1 },
+          "url": { "type": "string", "example": "https://your-system.cbz.co.zw/helpengine-events" },
+          "subscriptions": {
+            "type": "array",
+            "items": { "type": "string" },
+            "example": ["conversation_created", "message_created"]
+          }
+        }
+      },
+      "WebhookCreate": {
+        "type": "object",
+        "required": ["url", "subscriptions"],
+        "properties": {
+          "url": { "type": "string", "example": "https://your-system.cbz.co.zw/helpengine-events" },
+          "subscriptions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "conversation_created",
+                "conversation_status_changed",
+                "conversation_resolved",
+                "conversation_updated",
+                "message_created",
+                "contact_created",
+                "contact_updated"
+              ]
+            }
+          }
+        }
+      },
+      "ReportSummary": {
+        "type": "object",
+        "properties": {
+          "conversations_count": { "type": "integer", "example": 342 },
+          "open_conversations_count": { "type": "integer", "example": 14 },
+          "resolved_conversations_count": { "type": "integer", "example": 328 },
+          "avg_first_response_time": { "type": "number", "example": 124.5, "description": "Seconds" },
+          "avg_resolution_time": { "type": "number", "example": 3600.0, "description": "Seconds" }
+        }
+      },
+      "UcSignInRequest": {
+        "type": "object",
+        "description": "CBZ UserConnect credentials. The system_id is resolved automatically from server configuration — do not include it in the request.",
+        "required": ["username", "password"],
+        "properties": {
+          "username": { "type": "string", "example": "itdevelopers" },
+          "password": { "type": "string", "example": "your-userconnect-password" }
+        }
+      },
+      "UcSignInResponse": {
+        "type": "object",
+        "description": "On success returns the standard auth data object. May instead return an OTP challenge or a password-change requirement.",
+        "properties": {
+          "data": {
+            "type": "object",
+            "description": "Present on successful authentication",
+            "properties": {
+              "access_token": { "type": "string", "example": "abc123token" },
+              "token_type": { "type": "string", "example": "Bearer" },
+              "id": { "type": "integer", "example": 5 },
+              "name": { "type": "string", "example": "Jane Moyo" },
+              "email": { "type": "string", "example": "agent@cbz.co.zw" },
+              "account_id": { "type": "integer", "example": 1 },
+              "role": { "type": "string", "example": "agent" }
+            }
+          },
+          "requiresOtp": {
+            "type": "boolean",
+            "description": "True when two-factor verification is required. Call POST /api/v1/auth/uc_verify_otp next.",
+            "example": true
+          },
+          "otpMessage": {
+            "type": "string",
+            "description": "Human-readable OTP prompt shown to the user",
+            "example": "Enter the OTP sent to your registered email address."
+          },
+          "requiresPasswordChange": {
+            "type": "boolean",
+            "description": "True when the account password has expired or this is the first login. Call PUT /api/v1/auth/uc_change_password next.",
+            "example": true
+          },
+          "changePasswordToken": {
+            "type": "string",
+            "description": "Short-lived JWT (10 min) required as the bearer token for PUT /api/v1/auth/uc_change_password",
+            "example": "eyJhbGci..."
+          }
+        }
+      },
+      "UcVerifyOtpRequest": {
+        "type": "object",
+        "required": ["username", "otp"],
+        "properties": {
+          "username": { "type": "string", "example": "itdevelopers" },
+          "otp": { "type": "string", "example": "A3F9B2C1" }
+        }
+      },
+      "UcForgotPasswordRequest": {
+        "type": "object",
+        "required": ["username"],
+        "properties": {
+          "username": { "type": "string", "example": "itdevelopers" }
+        }
+      },
+      "UcChangeForgottenPasswordRequest": {
+        "type": "object",
+        "required": ["username", "otp", "newPassword", "confirmPassword"],
+        "properties": {
+          "username": { "type": "string", "example": "itdevelopers" },
+          "otp": { "type": "string", "example": "A3F9B2C1" },
+          "newPassword": { "type": "string", "example": "NewPass@2025" },
+          "confirmPassword": { "type": "string", "example": "NewPass@2025" }
+        }
+      },
+      "UcChangePasswordRequest": {
+        "type": "object",
+        "description": "Use the changePasswordToken returned by POST /api/v1/auth/uc_sign_in as the Bearer token for this request.",
+        "required": ["changePasswordToken", "newPassword", "confirmPassword"],
+        "properties": {
+          "changePasswordToken": { "type": "string", "example": "eyJhbGci..." },
+          "newPassword": { "type": "string", "example": "NewPass@2025" },
+          "confirmPassword": { "type": "string", "example": "NewPass@2025" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/v1/auth/uc_sign_in": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Sign in with CBZ UserConnect credentials",
+        "description": "Primary authentication endpoint for CBZ staff. Authenticates against the UserConnect IAM service using a UserConnect username and password. The system_id is resolved server-side — do not include it.\n\n**Response variants:**\n- `data` present → authentication successful; use `data.access_token` or `data.token_type` + token for subsequent requests.\n- `requiresOtp: true` → two-factor code sent to the user's email; call `POST /api/v1/auth/uc_verify_otp` next.\n- `requiresPasswordChange: true` → password expired or first login; call `PUT /api/v1/auth/uc_change_password` with the returned `changePasswordToken` as the Bearer token.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UcSignInRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticated, OTP required, or password change required",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UcSignInResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid username or password",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "503": {
+            "description": "UserConnect IAM service unreachable",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/uc_verify_otp": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Verify two-factor OTP (UC credentials flow)",
+        "description": "Called after `POST /api/v1/auth/uc_sign_in` returns `requiresOtp: true`. Submit the OTP code sent to the user's registered email. Returns the same auth data object as a successful sign-in.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UcVerifyOtpRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OTP verified — authentication successful",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UcSignInResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired OTP",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/uc_forgot_password": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Request a password reset OTP",
+        "description": "Triggers UserConnect to send a one-time reset code to the user's registered email. Follow up with `PUT /api/v1/auth/uc_change_forgotten_password`.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UcForgotPasswordRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reset code sent",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "info": { "type": "string", "example": "A reset code has been sent to your registered email." } } } } }
+          },
+          "422": {
+            "description": "Account not found or inactive",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/uc_change_forgotten_password": {
+      "put": {
+        "tags": ["Authentication"],
+        "summary": "Reset forgotten password using OTP",
+        "description": "Completes the forgot-password flow. Requires the username, the OTP sent to email, and the new password (confirmed). No authentication header needed.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UcChangeForgottenPasswordRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password reset successfully",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "info": { "type": "string", "example": "Password changed successfully. You can now sign in." } } } } }
+          },
+          "422": {
+            "description": "Invalid OTP, password mismatch, or policy violation",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/uc_change_password": {
+      "put": {
+        "tags": ["Authentication"],
+        "summary": "Change expired or initial password",
+        "description": "Called when `POST /api/v1/auth/uc_sign_in` returns `requiresPasswordChange: true`. Pass the `changePasswordToken` from that response as the `Bearer` token in the `Authorization` header **and** in the request body.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UcChangePasswordRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password changed — sign in again with new credentials",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "info": { "type": "string", "example": "Password changed successfully." } } } } }
+          },
+          "422": {
+            "description": "Password mismatch or policy violation",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/profile": {
+      "get": {
+        "tags": ["Authentication"],
+        "summary": "Get current user profile and API token",
+        "responses": {
+          "200": {
+            "description": "Authenticated user profile",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Profile" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/conversations": {
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 },
+          "description": "CBZ HelpEngine account ID (always 1)"
+        }
+      ],
+      "get": {
+        "tags": ["Conversations"],
+        "summary": "List conversations",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["open", "resolved", "pending", "snoozed"] },
+            "description": "Filter by conversation status"
+          },
+          {
+            "name": "assignee_type",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["me", "assigned", "unassigned"] },
+            "description": "Filter by assignment"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": { "type": "integer", "default": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of conversations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "meta": {
+                          "type": "object",
+                          "properties": {
+                            "all_count": { "type": "integer" },
+                            "open_count": { "type": "integer" },
+                            "resolved_count": { "type": "integer" }
+                          }
+                        },
+                        "payload": {
+                          "type": "array",
+                          "items": { "$ref": "#/components/schemas/Conversation" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Conversations"],
+        "summary": "Create a new conversation",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ConversationCreate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conversation created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Conversation" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/conversations/{id}": {
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        },
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 101 },
+          "description": "Conversation ID"
+        }
+      ],
+      "get": {
+        "tags": ["Conversations"],
+        "summary": "Get a conversation",
+        "responses": {
+          "200": {
+            "description": "Conversation details",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Conversation" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Conversations"],
+        "summary": "Update conversation attributes",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "assignee_id": { "type": "integer", "nullable": true },
+                  "team_id": { "type": "integer", "nullable": true },
+                  "priority": { "type": "string", "enum": ["none", "low", "medium", "high", "urgent"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated conversation",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Conversation" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/conversations/{id}/toggle_status": {
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        },
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 101 }
+        }
+      ],
+      "post": {
+        "tags": ["Conversations"],
+        "summary": "Change conversation status",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["status"],
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": ["open", "resolved", "pending", "snoozed"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Status updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "current_status": { "type": "string", "example": "resolved" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/conversations/{conversation_id}/messages": {
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        },
+        {
+          "name": "conversation_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 101 }
+        }
+      ],
+      "get": {
+        "tags": ["Messages"],
+        "summary": "List messages in a conversation",
+        "responses": {
+          "200": {
+            "description": "Messages list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "payload": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Message" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Messages"],
+        "summary": "Send a message",
+        "description": "Send an outgoing message to the customer, or create an internal agent note (private: true).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/MessageCreate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Message created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Message" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/contacts": {
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        }
+      ],
+      "get": {
+        "tags": ["Contacts"],
+        "summary": "List contacts",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["name", "email", "phone_number", "last_activity_at"] }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Contacts list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "payload": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Contact" }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "count": { "type": "integer" },
+                        "current_page": { "type": "integer" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Contacts"],
+        "summary": "Create a contact",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ContactCreate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Contact created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Contact" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/contacts/search": {
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        }
+      ],
+      "get": {
+        "tags": ["Contacts"],
+        "summary": "Search contacts",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Search term — matched against name, email, and phone number"
+          },
+          {
+            "name": "include_contacts",
+            "in": "query",
+            "schema": { "type": "boolean", "default": true }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": { "type": "integer", "default": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "payload": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Contact" }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "count": { "type": "integer" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/contacts/{id}": {
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        },
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 42 }
+        }
+      ],
+      "get": {
+        "tags": ["Contacts"],
+        "summary": "Get a contact",
+        "responses": {
+          "200": {
+            "description": "Contact details",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Contact" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/contacts/{id}/conversations": {
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        },
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 42 }
+        }
+      ],
+      "get": {
+        "tags": ["Contacts"],
+        "summary": "Get a contact's conversation history",
+        "responses": {
+          "200": {
+            "description": "All conversations for this contact across all inboxes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "payload": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Conversation" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/inboxes": {
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        }
+      ],
+      "get": {
+        "tags": ["Inboxes"],
+        "summary": "List inboxes",
+        "responses": {
+          "200": {
+            "description": "All inboxes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "payload": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Inbox" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/inbox_members/{inbox_id}": {
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        },
+        {
+          "name": "inbox_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        }
+      ],
+      "get": {
+        "tags": ["Inboxes"],
+        "summary": "List agents assigned to an inbox",
+        "responses": {
+          "200": {
+            "description": "Inbox members",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "payload": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Agent" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/agents": {
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        }
+      ],
+      "get": {
+        "tags": ["Agents"],
+        "summary": "List agents",
+        "responses": {
+          "200": {
+            "description": "All agents",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Agent" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Agents"],
+        "summary": "Invite a new agent",
+        "description": "Creates an agent record and sends an invitation email.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AgentCreate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Agent created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Agent" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/agents/{id}": {
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        },
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 5 }
+        }
+      ],
+      "put": {
+        "tags": ["Agents"],
+        "summary": "Update an agent",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "role": { "type": "string", "enum": ["agent", "administrator"] },
+                  "availability": { "type": "string", "enum": ["online", "busy", "offline"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Agent updated",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Agent" }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Agents"],
+        "summary": "Remove an agent from the account",
+        "responses": {
+          "200": {
+            "description": "Agent removed"
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/teams": {
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        }
+      ],
+      "get": {
+        "tags": ["Teams"],
+        "summary": "List teams",
+        "responses": {
+          "200": {
+            "description": "All teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Team" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/teams/{id}/team_members": {
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        },
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 2 }
+        }
+      ],
+      "get": {
+        "tags": ["Teams"],
+        "summary": "List team members",
+        "responses": {
+          "200": {
+            "description": "Agents in this team",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Agent" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Teams"],
+        "summary": "Add agents to a team",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["user_ids"],
+                "properties": {
+                  "user_ids": {
+                    "type": "array",
+                    "items": { "type": "integer" },
+                    "example": [5, 6, 7]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Members added"
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/reports/summary": {
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        }
+      ],
+      "get": {
+        "tags": ["Reports"],
+        "summary": "Get account report summary",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "schema": { "type": "integer" },
+            "description": "Start Unix timestamp"
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "schema": { "type": "integer" },
+            "description": "End Unix timestamp"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Report summary",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ReportSummary" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/reports": {
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        }
+      ],
+      "get": {
+        "tags": ["Reports"],
+        "summary": "Get conversation reports over time",
+        "parameters": [
+          {
+            "name": "metric",
+            "in": "query",
+            "schema": { "type": "string", "example": "account" }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": { "type": "string", "example": "account" }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "schema": { "type": "integer" }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "schema": { "type": "integer" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Report data"
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/search": {
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        }
+      ],
+      "get": {
+        "tags": ["Search"],
+        "summary": "Search across conversations, contacts, and messages",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Search query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results grouped by type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "payload": {
+                      "type": "object",
+                      "properties": {
+                        "contacts": { "type": "array", "items": { "$ref": "#/components/schemas/Contact" } },
+                        "conversations": { "type": "array", "items": { "$ref": "#/components/schemas/Conversation" } },
+                        "messages": { "type": "array", "items": { "$ref": "#/components/schemas/Message" } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/webhooks": {
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        }
+      ],
+      "get": {
+        "tags": ["Webhooks"],
+        "summary": "List registered outbound webhooks",
+        "responses": {
+          "200": {
+            "description": "Webhooks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Webhook" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Webhooks"],
+        "summary": "Register an outbound webhook",
+        "description": "HelpEngine will POST event payloads to the registered URL when subscribed events occur.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/WebhookCreate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook registered",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Webhook" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/webhooks/{id}": {
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        },
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "integer", "example": 1 }
+        }
+      ],
+      "delete": {
+        "tags": ["Webhooks"],
+        "summary": "Delete a webhook",
+        "responses": {
+          "200": {
+            "description": "Webhook deleted"
+          }
+        }
+      }
+    },
+    "/webhooks/whatsapp/{phone_number}": {
+      "parameters": [
+        {
+          "name": "phone_number",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "example": "+263788170276" },
+          "description": "WhatsApp phone number registered in Meta Cloud API"
+        }
+      ],
+      "get": {
+        "tags": ["Inbound Webhooks"],
+        "summary": "WhatsApp webhook verification",
+        "description": "Called by Meta to verify the webhook endpoint during setup.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "hub.mode",
+            "in": "query",
+            "schema": { "type": "string", "example": "subscribe" }
+          },
+          {
+            "name": "hub.verify_token",
+            "in": "query",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "hub.challenge",
+            "in": "query",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Challenge echoed back to Meta"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Inbound Webhooks"],
+        "summary": "Receive inbound WhatsApp messages",
+        "description": "Called by Meta Cloud API when a customer sends a WhatsApp message. Not called by your integration — this is the endpoint Meta posts to.",
+        "security": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Meta Cloud API webhook payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Acknowledged"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    { "name": "Authentication", "description": "Sign in and retrieve API tokens" },
+    { "name": "Conversations", "description": "Manage support conversations" },
+    { "name": "Messages", "description": "Send and retrieve messages within conversations" },
+    { "name": "Contacts", "description": "Manage customer contact records" },
+    { "name": "Inboxes", "description": "List channels and inbox members" },
+    { "name": "Agents", "description": "Manage agent accounts" },
+    { "name": "Teams", "description": "Manage teams and team membership" },
+    { "name": "Reports", "description": "Retrieve reporting data and summaries" },
+    { "name": "Search", "description": "Full-text search across the account" },
+    { "name": "Webhooks", "description": "Register and manage outbound event webhooks" },
+    { "name": "Inbound Webhooks", "description": "Channel provider callbacks (Meta, WhatsApp) — not called by your integration" }
+  ]
+}
