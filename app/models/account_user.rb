@@ -30,6 +30,7 @@ class AccountUser < ApplicationRecord
   belongs_to :account
   belongs_to :user
   belongs_to :inviter, class_name: 'User', optional: true
+  belongs_to :custom_role, optional: true
 
   enum role: { agent: 0, administrator: 1 }
   enum availability: { online: 0, offline: 1, busy: 2 }
@@ -54,7 +55,31 @@ class AccountUser < ApplicationRecord
   end
 
   def permissions
-    administrator? ? ['administrator'] : ['agent']
+    return ['administrator'] if administrator?
+
+    # If user has a custom role, return those permissions
+    return custom_role.permissions if custom_role.present?
+
+    # Default agent permissions
+    ['agent']
+  end
+
+  # Check if the user has a specific permission
+  def can?(permission)
+    # Administrators can do everything
+    return true if administrator?
+
+    # Check if the user's permissions include the requested permission
+    permissions.include?(permission.to_s)
+  end
+
+  # Check if the user has any of the specified permissions
+  def can_any?(*permissions)
+    # Administrators can do everything
+    return true if administrator?
+
+    # Check if the user has any of the requested permissions
+    (permissions.map(&:to_s) & self.permissions).any?
   end
 
   def push_event_data

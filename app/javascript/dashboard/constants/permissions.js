@@ -4,6 +4,10 @@ export const AVAILABLE_CUSTOM_ROLE_PERMISSIONS = [
   'conversation_participating_manage',
   'contact_manage',
   'report_manage',
+  'label_manage',
+  'team_manage',
+  'inbox_manage',
+  'campaign_manage',
   'knowledge_base_manage',
 ];
 
@@ -26,6 +30,10 @@ export const CONVERSATION_PARTICIPATING_PERMISSIONS =
 export const CONTACT_PERMISSIONS = 'contact_manage';
 
 export const REPORTS_PERMISSIONS = 'report_manage';
+
+export const LABEL_PERMISSIONS = 'label_manage';
+
+export const TEAM_PERMISSIONS = 'team_manage';
 
 export const PORTAL_PERMISSIONS = 'knowledge_base_manage';
 

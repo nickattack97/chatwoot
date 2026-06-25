@@ -1,6 +1,16 @@
 module Enterprise::Concerns::Account
   extend ActiveSupport::Concern
 
+  SUPERVISOR_ROLE_NAME = 'Supervisor'
+  SUPERVISOR_ROLE_PERMISSIONS = %w[
+    report_manage
+    label_manage
+    team_manage
+    inbox_manage
+    conversation_manage
+    contact_manage
+  ].freeze
+
   included do
     store_accessor :settings, :conversation_required_attributes
 
@@ -19,5 +29,22 @@ module Enterprise::Concerns::Account
     has_many :calls, dependent: :destroy_async
 
     has_one :saml_settings, dependent: :destroy_async, class_name: 'AccountSamlSettings'
+
+    after_create_commit :create_default_supervisor_role
+  end
+
+  class_methods do
+    def create_default_supervisor_role_for_account!(account)
+      account.custom_roles.find_or_initialize_by(name: SUPERVISOR_ROLE_NAME).tap do |role|
+        role.permissions = SUPERVISOR_ROLE_PERMISSIONS
+        role.save!
+      end
+    end
+  end
+
+  private
+
+  def create_default_supervisor_role
+    self.class.create_default_supervisor_role_for_account!(self)
   end
 end

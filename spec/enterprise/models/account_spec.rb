@@ -11,6 +11,17 @@ RSpec.describe Account, type: :model do
     it { is_expected.to have_many(:custom_roles).dependent(:destroy_async) }
   end
 
+  describe 'default supervisor custom role' do
+    let(:account) { create(:account) }
+
+    it 'creates a supervisor custom role with inbox, conversation, contact, campaign, label, team and report permissions' do
+      custom_role = account.custom_roles.find_by(name: 'Supervisor')
+
+      expect(custom_role).to be_present
+      expect(custom_role.permissions).to match_array(%w[report_manage label_manage team_manage conversation_manage contact_manage inbox_manage campaign_manage])
+    end
+  end
+
   describe 'sla_policies' do
     let!(:account) { create(:account) }
     let!(:sla_policy) { create(:sla_policy, account: account) }

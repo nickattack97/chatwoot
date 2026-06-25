@@ -38,6 +38,10 @@
       "CONVERSATION_PARTICIPATING_MANAGE": "Manage participating conversations and those assigned to them",
       "CONTACT_MANAGE": "Manage contacts",
       "REPORT_MANAGE": "Manage reports",
+      "LABEL_MANAGE": "Manage labels",
+      "TEAM_MANAGE": "Manage teams",
+      "INBOX_MANAGE": "Manage inboxes",
+      "CAMPAIGN_MANAGE": "Manage campaigns",
       "KNOWLEDGE_BASE_MANAGE": "Manage knowledge base"
     },
     "FORM": {

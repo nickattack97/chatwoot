@@ -16,6 +16,8 @@ const dummyCustomRolesData = [
       'conversation_unassigned_manage',
       'contact_manage',
       'report_manage',
+      'label_manage',
+      'team_manage',
       'knowledge_base_manage',
     ],
   },

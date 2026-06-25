@@ -35,38 +35,49 @@ class InboxPolicy < ApplicationPolicy
   end
 
   def campaigns?
-    @account_user.administrator?
+    administrator? || can?('campaign_manage')
   end
 
   def create?
-    @account_user.administrator?
+    administrator? || can?('inbox_manage')
   end
 
   def update?
-    @account_user.administrator?
+    administrator? || can?('inbox_manage')
   end
 
   def destroy?
-    @account_user.administrator?
+    administrator? || can?('inbox_manage')
   end
 
   def set_agent_bot?
-    @account_user.administrator?
+    administrator? || can?('inbox_manage')
   end
 
   def avatar?
-    @account_user.administrator?
+    administrator? || can?('inbox_manage')
   end
 
   def sync_templates?
-    @account_user.administrator?
+    administrator? || can?('inbox_manage')
   end
 
   def health?
-    @account_user.administrator?
+    administrator? || can?('inbox_manage')
   end
 
   def reset_secret?
-    @account_user.administrator?
+    administrator? || can?('inbox_manage')
+  end
+
+  private
+
+  def administrator?
+    account_user&.administrator?
+  end
+
+  def can?(permission)
+    @account_user.can?(permission)
   end
 end
+

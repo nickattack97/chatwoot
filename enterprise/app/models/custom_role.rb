@@ -22,6 +22,10 @@
 # - 'conversation_participating_manage': Can manage conversations they are participating in (assigned to or a participant).
 # - 'contact_manage': Can manage contacts.
 # - 'report_manage': Can manage reports.
+# - 'label_manage': Can manage labels.
+# - 'team_manage': Can manage teams.
+# - 'inbox_manage': Can manage inboxes.
+# - 'campaign_manage': Can manage campaigns.
 # - 'knowledge_base_manage': Can manage knowledge base portals.
 
 class CustomRole < ApplicationRecord
@@ -34,9 +38,24 @@ class CustomRole < ApplicationRecord
     conversation_participating_manage
     contact_manage
     report_manage
+    label_manage
+    team_manage
+    inbox_manage
+    campaign_manage
     knowledge_base_manage
   ].freeze
 
   validates :name, presence: true
-  validates :permissions, inclusion: { in: PERMISSIONS }
+  validate :validate_permissions
+
+  private
+
+  def validate_permissions
+    return if permissions.blank?
+
+    invalid_permissions = permissions - PERMISSIONS
+    return if invalid_permissions.empty?
+
+    errors.add(:permissions, "contains invalid permissions: #{invalid_permissions.join(', ')}")
+  end
 end
