@@ -1,3 +1,13 @@
+<p align="center">
+  <img src="../public/brand-assets/cbz-logo.png" alt="CBZ Bank" width="80">
+</p>
+
+<h1 align="center">CBZ HelpEngine</h1>
+<p align="center"><strong>API Documentation</strong></p>
+<p align="center">Internal &nbsp;·&nbsp; Developer Reference &nbsp;·&nbsp; CBZ IT Department</p>
+
+---
+
 # CBZ HelpEngine — API Documentation
 
 ## Overview

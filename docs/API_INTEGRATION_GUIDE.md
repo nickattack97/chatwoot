@@ -1,11 +1,21 @@
-# CBZ HelpEngine — API Integration Guide
+<p align="center">
+  <img src="../public/brand-assets/cbz-logo.png" alt="CBZ Bank" width="80">
+</p>
+
+<h1 align="center">CBZ HelpEngine</h1>
+<p align="center"><strong>API Integration Guide</strong></p>
+<p align="center">External &nbsp;·&nbsp; Third-Party & Internal System Integrations &nbsp;·&nbsp; Core Applications Development</p>
+
+---
+
+## Overview
 
 This guide is for third-party developers and internal CBZ systems that want to
 integrate with CBZ HelpEngine programmatically — for example, to create conversations
 from another system, look up customer history, send messages, or receive real-time
 event notifications via webhooks.
 
-**Base URL:** `https://pg.cbz.co.zw/api/v1`
+**Base URL:** `https://192.168.230.54/api/v1`
 
 All requests and responses use JSON. All endpoints require authentication.
 
@@ -30,14 +40,14 @@ Include your token in every request using the `api_access_token` header:
 
 ```http
 GET /api/v1/profile HTTP/1.1
-Host: pg.cbz.co.zw
+Host: 192.168.230.54
 api_access_token: YOUR_TOKEN_HERE
 ```
 
 Or as a query parameter (useful for quick tests):
 
 ```
-https://pg.cbz.co.zw/api/v1/profile?api_access_token=YOUR_TOKEN_HERE
+https://192.168.230.54/api/v1/profile?api_access_token=YOUR_TOKEN_HERE
 ```
 
 All examples below assume the header is set. The **account ID** for CBZ HelpEngine
@@ -364,7 +374,24 @@ GET /api/v1/accounts/1/conversations?status=open&page=2
 
 ---
 
+## Full API reference
+
+This guide covers the most common integration scenarios. For a complete reference of
+every available endpoint — including request/response schemas, parameter descriptions,
+and additional code samples — see the official Chatwoot developer documentation:
+
+**[https://developers.chatwoot.com/introduction](https://developers.chatwoot.com/introduction)**
+
+CBZ HelpEngine is built on Chatwoot, so all endpoints documented there are available.
+When following examples from the developer docs, substitute:
+
+| Developer docs | CBZ HelpEngine |
+|---|---|
+| `app.chatwoot.com` | `192.168.230.54` |
+| Your account ID | `1` |
+
+---
+
 ## Getting help
 
-For API access, token creation, or integration support contact the CBZ HelpEngine
-administrator or raise a request via the internal IT helpdesk.
+For API access, token creation, or integration support contact the CBZ HelpEngine administrator.

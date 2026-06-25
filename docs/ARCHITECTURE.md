@@ -1,8 +1,16 @@
-# CBZ HelpEngine — System Architecture
+<p align="center">
+  <img src="../public/brand-assets/cbz-logo.png" alt="CBZ Bank" width="80">
+</p>
+
+<h1 align="center">HelpEngine</h1>
+<p align="center"><strong>System Architecture</strong></p>
+<p align="center">Internal &nbsp;·&nbsp; Infrastructure &nbsp;·&nbsp; Core Applications Development</p>
+
+---
 
 ## Overview
 
-CBZ HelpEngine is a customised deployment of the Chatwoot open-source customer support
+HelpEngine is a customised deployment of the Chatwoot open-source customer support
 platform, rebranded and configured for CBZ Bank Limited's internal support operations.
 It provides a unified inbox for managing customer conversations across multiple channels
 including WhatsApp, email, and web chat.
@@ -31,6 +39,11 @@ graph TD
         end
     end
 
+    subgraph UC ["192.168.3.173 — UserConnect IAM"]
+        UCServer["UserConnect API\nPort 9700\n.NET / SQL Server"]
+        MicrosoftEntra["Microsoft Entra ID\n(Azure AD)"]
+    end
+
     Internet -->|"HTTPS :443"| DMZnginx
     DMZnginx -->|"HTTPS → :443\nallowlisted paths only"| LocalNginx
     LocalNginx -->|"HTTP 127.0.0.1:3000"| Rails
@@ -41,6 +54,8 @@ graph TD
     Sidekiq <--> Redis
 
     InternalNet -->|"HTTPS :443\nhelpengine.cbz.co.zw"| LocalNginx
+    Rails -->|"Credential proxy / SSO"| UCServer
+    UCServer -->|"SAML 2.0"| MicrosoftEntra
 ```
 
 > **⚠ DNS pending** — The internal DNS entry for `helpengine.cbz.co.zw` has not been
@@ -96,6 +111,41 @@ sequenceDiagram
     N->>P: HTTP 127.0.0.1:3000
     P->>R: Process request
     R-->>B: Response (via same path)
+```
+
+### Authentication — UserConnect credential proxy (Path 1)
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant R as Rails
+    participant UC as UserConnect API<br/>192.168.3.173:9700
+
+    B->>R: POST /api/v1/auth/uc_sign_in<br/>{username, password}
+    R->>UC: Proxy credentials
+    UC-->>R: JWT or OTP required
+    R-->>B: Set DeviseTokenAuth headers → redirect to dashboard
+```
+
+### Authentication — Sign in with Microsoft / UserConnect SSO (Path 2)
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant R as Rails
+    participant UC as UserConnect API<br/>192.168.3.173:9700
+    participant MS as Microsoft Entra ID
+
+    B->>R: GET /uc/sso
+    R-->>B: Redirect to UserConnect SAML login
+    B->>UC: GET /api/v1/auth/saml/login?systemId=20031
+    UC-->>B: Redirect to Entra ID
+    B->>MS: Authenticate (Microsoft login page)
+    MS-->>UC: POST SAML assertion to /api/v1/auth/saml/acs
+    UC-->>B: Redirect to /saml-callback?token=JWT&systemId=20031
+    B->>R: GET /saml-callback?token=JWT
+    R->>UC: Decode & validate JWT
+    R-->>B: Set session → redirect to dashboard
 ```
 
 ### WhatsApp webhook (Meta → app)
@@ -232,6 +282,8 @@ All other requests return the DMZ's default response.
 |---|---|
 | `/app` | Main dashboard UI |
 | `/auth` | Login, password reset, OAuth |
+| `/uc` | UserConnect SSO initiation (`GET /uc/sso`) |
+| `/saml-callback` | UserConnect SAML callback after Microsoft auth |
 | `/api` | REST API |
 | `/public` | Public API (CSAT survey submission, widget API) |
 | `/enterprise` | Enterprise feature API |
@@ -241,6 +293,7 @@ All other requests return the DMZ's default response.
 | `/widget` | Embeddable chat widget |
 | `/survey` | CSAT survey links |
 | `/rails/active_storage` | File/attachment serving |
+| `/audio` | Notification sound files |
 | `/vite` | Compiled JS/CSS assets |
 | `/brand-assets` | Logo and brand images |
 | `/dashboard` | Static dashboard images |
@@ -278,3 +331,6 @@ on the server. This file is not committed to the repository. Key variables:
 | `ACTIVE_RECORD_ENCRYPTION_*` | Encryption keys for sensitive model attributes |
 
 See `.env.production` in the repository for the full variable list (secrets redacted).
+
+UserConnect IAM settings are stored in the database (not `.env`) and can be toggled
+via Super Admin → Installation Configs or via Rails runner. See [CONFIGURATION.md](CONFIGURATION.md#userconnect-iam).

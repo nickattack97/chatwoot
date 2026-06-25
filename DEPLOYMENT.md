@@ -1,3 +1,13 @@
+<p align="center">
+  <img src="public/brand-assets/cbz-logo.png" alt="CBZ Bank" width="80">
+</p>
+
+<h1 align="center">CBZ HelpEngine</h1>
+<p align="center"><strong>Deployment Guide</strong></p>
+<p align="center">Internal &nbsp;·&nbsp; DevOps &nbsp;·&nbsp; CBZ IT Department</p>
+
+---
+
 # CBZ HelpEngine — Deployment Guide
 
 ## Architecture Overview
@@ -96,7 +106,7 @@ Sync source code (~1 minute over LAN):
 
 ```bash
 cd "/path/to/chatwoot"
-rsync -az --exclude='node_modules' --exclude='tmp' --exclude='log' \
+rsync -az --delete --exclude='node_modules' --exclude='tmp' --exclude='log' \
   . itdevtd@192.168.230.54:~/cbz-source/
 ```
 
@@ -445,6 +455,38 @@ location /health {
     proxy_http_version 1.1;
     proxy_set_header   Host $host;
 }
+
+# UserConnect SSO initiation
+location /uc {
+    proxy_pass         https://192.168.230.54;
+    proxy_http_version 1.1;
+    proxy_set_header   Host $host;
+    proxy_set_header   X-Real-IP $remote_addr;
+    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header   X-Forwarded-Proto $scheme;
+}
+
+# UserConnect SAML callback (Microsoft Entra redirects here after auth)
+location /saml-callback {
+    proxy_pass         https://192.168.230.54;
+    proxy_http_version 1.1;
+    proxy_set_header   Host $host;
+    proxy_set_header   X-Real-IP $remote_addr;
+    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header   X-Forwarded-Proto $scheme;
+}
+
+# Notification sounds
+location /audio {
+    proxy_pass         https://192.168.230.54;
+    proxy_http_version 1.1;
+    proxy_set_header   Host $host;
+    proxy_set_header   X-Real-IP $remote_addr;
+    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header   X-Forwarded-Proto $scheme;
+    expires            7d;
+    add_header         Cache-Control "public";
+}
 ```
 
 After editing the DMZ nginx config:
@@ -498,27 +540,20 @@ permanent system user token via Meta Business Suite → Settings → System User
 
 ## Subsequent deployments (updates)
 
+A `deploy.sh` script in the repository root handles the full deploy in one command from your Mac:
+
 ```bash
-# 1. Sync source to server
 cd "/path/to/chatwoot"
-rsync -az --exclude='node_modules' --exclude='tmp' --exclude='log' \
-  . itdevtd@192.168.230.54:~/cbz-source/
-
-# 2. Rebuild image on server
-ssh itdevtd@192.168.230.54
-cd ~/cbz-source
-docker build -f docker/Dockerfile -t cbz-helpengine:latest . 2>&1 | tee ~/cbz-build.log
-
-# 3. Restart app containers (leaves postgres and redis running)
-cd ~/cbz-helpengine
-docker compose -f docker-compose.production.yaml up -d --no-deps rails sidekiq
-
-# 4. Run any new migrations
-docker compose -f docker-compose.production.yaml exec rails bundle exec rails db:migrate
+./deploy.sh
 ```
 
-> To pick up changes to `.env`, use `up -d` (not `restart`) — `restart` reuses
-> the environment from when the container was originally created.
+The script:
+1. `rsync --delete` — mirrors source to `~/cbz-source/` on the server (including deletions/renames)
+2. Builds the Docker image on the server with BuildKit cache mounts (subsequent builds are faster)
+3. Recreates the `rails` and `sidekiq` containers from the new image
+4. Waits 25 seconds then tails recent logs to confirm Puma started
+
+> To pick up changes to `.env`, you still need to manually restart with `up -d` after editing the file — `deploy.sh` only restarts containers using `--force-recreate` against the current `.env`.
 
 ---
 

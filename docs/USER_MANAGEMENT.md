@@ -1,3 +1,13 @@
+<p align="center">
+  <img src="../public/brand-assets/cbz-logo.png" alt="CBZ Bank" width="80">
+</p>
+
+<h1 align="center">CBZ HelpEngine</h1>
+<p align="center"><strong>User Management</strong></p>
+<p align="center">Internal &nbsp;·&nbsp; Administrator Guide &nbsp;·&nbsp; CBZ IT Department</p>
+
+---
+
 # CBZ HelpEngine — User Management
 
 ## Overview
@@ -242,47 +252,93 @@ flowchart TD
 
 ---
 
-## Planned: SSO / Directory Integration
+## UserConnect IAM Integration
 
-> **TODO** — Neither of these integrations is implemented yet. They are tracked here
-> as the intended next step for simplifying agent onboarding and offboarding at CBZ.
+CBZ HelpEngine is integrated with **UserConnect** — CBZ's internal identity platform.
+Agents authenticate using their standard CBZ credentials (the same ones used for all
+other CBZ systems). There is no separate HelpEngine password.
 
-### Microsoft Active Directory (Azure AD / Entra ID)
+Two login methods are available on the login page (both can be active simultaneously):
 
-Integrating with CBZ's existing Active Directory would allow:
+| Method | How it works |
+|---|---|
+| **Sign in with Microsoft** | Redirects through UserConnect → Microsoft Entra ID (SAML). One-click, no credentials entered in HelpEngine. |
+| **Username / Password** | Credentials entered in HelpEngine are proxied to the UserConnect API. Supports OTP (two-factor) if configured in UserConnect. |
 
-- Agents to log in with their standard CBZ Windows credentials (no separate password)
-- Automatic account deactivation when an employee leaves (AD account disabled → HelpEngine access revoked)
-- Role mapping from AD groups (e.g. `HelpEngine-Admins` → `administrator`, `HelpEngine-Agents` → `agent`)
+Both methods are controlled by InstallationConfig flags — see [CONFIGURATION.md](CONFIGURATION.md#userconnect-iam).
 
-Chatwoot supports SAML 2.0 and OAuth 2.0 / OpenID Connect out of the box (Enterprise).
-Azure AD can act as the Identity Provider (IdP) over either protocol.
+### Agent onboarding (JIT provisioning)
 
-**What needs to be done:**
+Agents do **not** need to be invited or pre-created. On first login via UserConnect,
+HelpEngine automatically:
 
-1. Register CBZ HelpEngine as an Enterprise Application in Azure AD (IT/Azure admin)
-2. Configure SAML or OIDC credentials in `.env` (`SSO_*` variables)
-3. Map AD group membership to HelpEngine roles via attribute claims
-4. Test with a pilot group before rolling out to all agents
+1. Looks up the user by email from the UserConnect JWT claims
+2. Creates a `User` record if one does not exist (name and email from UserConnect)
+3. Creates an `AccountUser` record with the `agent` role
+4. Logs the user in immediately — no email confirmation, no password setup
 
-### UserConnect (CBZ Internal IdP)
+The agent account will show **Verification Pending** until the email address is confirmed,
+but this does not block login or access. Agents can be promoted to `administrator` by
+an existing admin after their first login.
 
-If CBZ operates an internal identity provider (UserConnect), the same SAML/OIDC
-approach applies — HelpEngine registers as a Service Provider (SP), UserConnect acts
-as the IdP.
+### Agent offboarding
 
-**What needs to be done:**
+HelpEngine does not receive real-time deprovisioning events from UserConnect. When
+a staff member leaves:
 
-1. Obtain the UserConnect IdP metadata URL and signing certificate from IT
-2. Register HelpEngine's SP metadata with UserConnect
-3. Configure `SSO_ENABLED`, `SSO_IDP_*` variables in `.env`
-4. Map UserConnect attributes (`email`, `displayName`, group claims) to HelpEngine fields
+1. Their UserConnect account is disabled by IT — they can no longer authenticate
+2. An administrator should remove them from HelpEngine manually:
+   - **Via UI:** Settings → Agents → delete icon
+   - **Via Rails runner:** `account.account_users.find_by(user: User.find_by(email: 'agent@cbz.co.zw')).destroy!`
 
-### Benefits once implemented
+> Removing an agent unassigns them from all open conversations and removes them from
+> all teams and inboxes. The conversations remain open and unassigned.
 
-- Agents use one set of credentials across all CBZ systems
-- Offboarding is automatic — disabling the AD/UserConnect account immediately revokes HelpEngine access
-- No need for administrators to manually invite or remove agents for staff changes
+### Role management
+
+Roles are managed in HelpEngine independently of UserConnect — UserConnect only handles
+authentication, not role assignment.
+
+| Role | Assigned by |
+|---|---|
+| `agent` | Default on first login via UserConnect |
+| `administrator` | An existing HelpEngine administrator promotes the agent manually |
+
+To promote an agent:
+- **Via UI:** Settings → Agents → edit icon → change Role to Administrator
+- **Via Rails runner:** `account.account_users.find_by(user: User.find_by(email: '...')).update!(role: :administrator)`
+
+### Password reset
+
+The **Reset Password** button is hidden for UserConnect users — their password is managed
+in UserConnect/Entra ID, not in HelpEngine. Staff should use the CBZ UserConnect portal
+or contact IT to reset their password.
+
+The Forgot Password link on the login page is also not shown when UserConnect credential
+proxy login is active.
+
+### User lifecycle flow (with UserConnect)
+
+```mermaid
+flowchart TD
+    A([Staff member logs in\nvia UserConnect])
+    B{User exists\nin HelpEngine?}
+    C[JIT provision:\nCreate User + AccountUser\nrole = agent]
+    D[Log in to existing account]
+    E([Admin promotes to administrator\nif needed])
+    F([Staff member leaves CBZ])
+    G([IT disables UserConnect account])
+    H([Admin removes agent\nfrom HelpEngine])
+    I[Agent unassigned from\nall open conversations]
+
+    A --> B
+    B -->|No| C --> D
+    B -->|Yes| D
+    D --> E
+    F --> G
+    G -->|Access blocked at login| H
+    H --> I
+```
 
 ---
 
@@ -290,11 +346,13 @@ as the IdP.
 
 | Task | UI Path |
 |---|---|
-| Invite an agent | Settings → Agents → Invite Agent |
+| Invite an agent (non-UC users) | Settings → Agents → Invite Agent |
 | Change role / availability | Settings → Agents → edit icon |
 | Remove an agent | Settings → Agents → delete icon |
 | Create a team | Settings → Teams → Create New Team |
 | Add agents to a team | Settings → Teams → (team) → Settings |
 | Assign agents to an inbox | Settings → Inboxes → (inbox) → Collaborators |
 | Agent notification preferences | Settings → Notifications |
-| Agent profile (name, avatar, password) | Settings → Profile |
+| Agent profile (name, avatar) | Settings → Profile |
+| Enable/disable UC login methods | Super Admin → Installation Configs or Rails runner |
+| Reset a UC user's password | CBZ UserConnect portal / IT |

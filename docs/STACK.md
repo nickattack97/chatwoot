@@ -1,4 +1,33 @@
-# CBZ HelpEngine — Technology Stack
+<p align="center">
+  <img src="../public/brand-assets/cbz-logo.png" alt="CBZ Bank" width="80">
+</p>
+
+<h1 align="center">HelpEngine</h1>
+<p align="center"><strong>Technology Stack</strong></p>
+<p align="center">Internal &nbsp;·&nbsp; Development Reference &nbsp;·&nbsp; Core Applications Development</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Ruby-3.4.4-CC342D?style=flat-square&logo=ruby&logoColor=white" alt="Ruby">
+  <img src="https://img.shields.io/badge/Rails-7.1.5-CC0000?style=flat-square&logo=ruby-on-rails&logoColor=white" alt="Rails">
+  <img src="https://img.shields.io/badge/Vue.js-3.5.12-4FC08D?style=flat-square&logo=vue.js&logoColor=white" alt="Vue.js">
+  <img src="https://img.shields.io/badge/Vite-5.4.21-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite">
+  <img src="https://img.shields.io/badge/Tailwind_CSS-utility--first-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white" alt="Tailwind CSS">
+</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/PostgreSQL-16_(pgvector)-316192?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/Redis-alpine-DC382D?style=flat-square&logo=redis&logoColor=white" alt="Redis">
+  <img src="https://img.shields.io/badge/Sidekiq-%E2%89%A5_7.3.1-B81C2B?style=flat-square" alt="Sidekiq">
+  <img src="https://img.shields.io/badge/Docker-Compose_v2-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker">
+  <img src="https://img.shields.io/badge/nginx-proxy-009639?style=flat-square&logo=nginx&logoColor=white" alt="nginx">
+</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/Node.js-24.x-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js">
+  <img src="https://img.shields.io/badge/pnpm-10.x-F69220?style=flat-square&logo=pnpm&logoColor=white" alt="pnpm">
+  <img src="https://img.shields.io/badge/Ubuntu-22.04_LTS-E95420?style=flat-square&logo=ubuntu&logoColor=white" alt="Ubuntu">
+</p>
+
+---
+
 
 ## Summary
 

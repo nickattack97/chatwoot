@@ -1,3 +1,13 @@
+<p align="center">
+  <img src="../public/brand-assets/cbz-logo.png" alt="CBZ Bank" width="80">
+</p>
+
+<h1 align="center">CBZ HelpEngine</h1>
+<p align="center"><strong>Application Configuration Guide</strong></p>
+<p align="center">Internal &nbsp;·&nbsp; Administrator Guide &nbsp;·&nbsp; CBZ IT Department</p>
+
+---
+
 # CBZ HelpEngine — Application Configuration Guide
 
 This guide explains the initial configuration applied to CBZ HelpEngine and how to
@@ -386,6 +396,71 @@ Configure:
 - **Next response time** — response time for subsequent messages
 
 Assign an SLA to an inbox under Settings → Inboxes → (inbox) → Configuration → SLA Policy.
+
+---
+
+## UserConnect IAM
+
+CBZ HelpEngine integrates with **UserConnect** (CBZ's internal identity platform at
+`192.168.3.173:9700`) for agent authentication. Two login methods are supported and
+controlled independently via InstallationConfig flags.
+
+### Configuration keys
+
+| Key | Default | Purpose |
+|---|---|---|
+| `UC_BASE_URL` | `http://192.168.3.173:9700` | UserConnect API base URL |
+| `UC_SYSTEM_ID` | `20031` | HelpEngine's registered system ID in UserConnect |
+| `UC_CREDENTIAL_PROXY_ENABLED` | `false` | Enables username/password login proxied through UserConnect |
+| `UC_SSO_ENABLED` | `false` | Enables "Sign in with Microsoft" button (Entra ID via UserConnect SAML) |
+
+### Enabling/disabling via Rails runner
+
+```bash
+docker compose -f docker-compose.production.yaml exec rails bundle exec rails runner "
+  {
+    'UC_CREDENTIAL_PROXY_ENABLED' => true,
+    'UC_SSO_ENABLED'              => true,
+  }.each do |name, value|
+    c = InstallationConfig.find_or_initialize_by(name: name)
+    c.value = value
+    c.save!
+  end
+  GlobalConfig.clear_cache
+  puts 'Done.'
+"
+```
+
+### Login page behaviour
+
+| `UC_CREDENTIAL_PROXY_ENABLED` | `UC_SSO_ENABLED` | Login page shows |
+|---|---|---|
+| `false` | `false` | Standard email/password form (Chatwoot accounts only) |
+| `true` | `false` | Username/password form (proxied to UserConnect) |
+| `false` | `true` | "Sign in with Microsoft" button only |
+| `true` | `true` | "Sign in with Microsoft" button + username/password form |
+
+### How UserConnect SSO works
+
+1. User clicks **Sign in with Microsoft** → browser goes to `GET /uc/sso`
+2. HelpEngine redirects to `http://192.168.3.173:9700/api/v1/auth/saml/login?systemId=20031`
+3. UserConnect redirects the browser to Microsoft Entra ID
+4. User authenticates at Microsoft; Entra POSTs the SAML assertion back to UserConnect
+5. UserConnect issues a JWT and redirects to `https://<FRONTEND_URL>/saml-callback?token=JWT&systemId=20031`
+6. HelpEngine decodes the JWT, finds or JIT-provisions the agent, and establishes a session
+
+### UserConnect system registration
+
+HelpEngine is registered in UserConnect as **System ID 20031**. The environment record
+must have `Frontend URL` set to the HelpEngine base URL so UserConnect knows where to
+redirect after authentication:
+
+| Environment | Frontend URL |
+|---|---|
+| UAT / Staging | `https://192.168.230.54` |
+| Production | `https://pg.cbz.co.zw` (or `https://helpengine.cbz.co.zw` once DNS is live) |
+
+This is configured in UserConnect → Manage Systems → CBZ HelpEngine → Environments.
 
 ---
 

@@ -33,7 +33,11 @@ ssh -S "$SOCKET" "$SERVER" "
   cd $REMOTE_APP
   docker compose -f $COMPOSE up -d --no-deps --force-recreate rails sidekiq
 "
-
+echo ">>> Running database migrations..."
+ssh -S "$SOCKET" "$SERVER" "
+  cd $REMOTE_APP
+  docker compose -f $COMPOSE exec -T rails bundle exec rails db:migrate
+"
 echo "==> Waiting for Rails to boot..."
 sleep 25
 
