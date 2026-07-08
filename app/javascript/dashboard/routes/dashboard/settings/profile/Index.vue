@@ -26,6 +26,10 @@ import {
   ROLES,
   CONVERSATION_PERMISSIONS,
 } from 'dashboard/constants/permissions.js';
+import hotKeyEnterLight from 'dashboard/assets/images/profile/hot-key-enter.svg';
+import hotKeyEnterDark from 'dashboard/assets/images/profile/hot-key-enter-dark.svg';
+import hotKeyCtrlEnterLight from 'dashboard/assets/images/profile/hot-key-ctrl-enter.svg';
+import hotKeyCtrlEnterDark from 'dashboard/assets/images/profile/hot-key-ctrl-enter-dark.svg';
 
 export default {
   components: {
@@ -74,8 +78,8 @@ export default {
           description: this.$t(
             'PROFILE_SETTINGS.FORM.SEND_MESSAGE.CARD.ENTER_KEY.CONTENT'
           ),
-          lightImage: '/assets/images/dashboard/profile/hot-key-enter.svg',
-          darkImage: '/assets/images/dashboard/profile/hot-key-enter-dark.svg',
+          lightImage: hotKeyEnterLight,
+          darkImage: hotKeyEnterDark,
         },
         {
           key: 'cmd_enter',
@@ -85,9 +89,8 @@ export default {
           description: this.$t(
             'PROFILE_SETTINGS.FORM.SEND_MESSAGE.CARD.CMD_ENTER_KEY.CONTENT'
           ),
-          lightImage: '/assets/images/dashboard/profile/hot-key-ctrl-enter.svg',
-          darkImage:
-            '/assets/images/dashboard/profile/hot-key-ctrl-enter-dark.svg',
+          lightImage: hotKeyCtrlEnterLight,
+          darkImage: hotKeyCtrlEnterDark,
         },
       ],
       notificationPermissions: [...ROLES, ...CONVERSATION_PERMISSIONS],
