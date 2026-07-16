@@ -7,9 +7,8 @@ class Enterprise::UserconnectAuthController < ApplicationController
   def sso_initiate
     return render_disabled unless uc_sso_enabled?
 
-    uc_base   = GlobalConfigService.load('UC_BASE_URL', nil)
     system_id = GlobalConfigService.load('UC_SYSTEM_ID', nil)
-    redirect_to "#{uc_base}/api/v1/auth/saml/login?systemId=#{system_id}", allow_other_host: true
+    redirect_to "#{uc_sso_base_url}/api/v1/auth/saml/login?systemId=#{system_id}", allow_other_host: true
   end
 
   # GET /auth/uc_callback?token=…&systemId=…
@@ -149,6 +148,22 @@ class Enterprise::UserconnectAuthController < ApplicationController
 
   def uc_sso_enabled?
     GlobalConfigService.load('UC_SSO_ENABLED', 'false').to_s == 'true'
+  end
+
+  # The browser must reach whichever UC endpoint we redirect it to, so the choice depends on
+  # how the browser reached us, not on Rails' own network position (Rails can always reach the
+  # internal UC_BASE_URL). Requests arriving via the internet-facing DMZ proxy carry the public
+  # FRONTEND_URL host (e.g. pg.cbz.co.zw); anything else is assumed to be on the CBZ intranet,
+  # where only the internal UC_BASE_URL is routable.
+  def uc_sso_base_url
+    external_request? ? GlobalConfigService.load('UC_BASE_URL_EXTERNAL', nil) : GlobalConfigService.load('UC_BASE_URL', nil)
+  end
+
+  def external_request?
+    frontend_host = URI.parse(ENV.fetch('FRONTEND_URL', '')).host
+    frontend_host.present? && request.host.casecmp?(frontend_host)
+  rescue URI::InvalidURIError
+    false
   end
 
   def uc_credential_proxy_enabled?

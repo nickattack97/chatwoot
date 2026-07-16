@@ -409,10 +409,19 @@ controlled independently via InstallationConfig flags.
 
 | Key | Default | Purpose |
 |---|---|---|
-| `UC_BASE_URL` | `http://192.168.3.173:9700` | UserConnect API base URL |
+| `UC_BASE_URL` | `http://192.168.3.173:9700` | UserConnect API base URL — internal/intranet address. Used for all server-to-server calls (credential proxy) and as the SSO redirect target for intranet users. |
+| `UC_BASE_URL_EXTERNAL` | `https://userconnectbeuat-cbzco.msappproxy.net` | UserConnect's internet-facing Azure AD Application Proxy URL. Used only as the SSO redirect target when the browser reached HelpEngine via the public DMZ URL. |
 | `UC_SYSTEM_ID` | `20031` | HelpEngine's registered system ID in UserConnect |
 | `UC_CREDENTIAL_PROXY_ENABLED` | `false` | Enables username/password login proxied through UserConnect |
 | `UC_SSO_ENABLED` | `false` | Enables "Sign in with Microsoft" button (Entra ID via UserConnect SAML) |
+
+**Why two URLs for SSO:** `192.168.3.173` is a private, non-routable address — a browser
+reaching HelpEngine from outside the CBZ network (via `pg.cbz.co.zw`) can't resolve it.
+`sso_initiate` (`enterprise/app/controllers/enterprise/userconnect_auth_controller.rb`) picks
+between `UC_BASE_URL` and `UC_BASE_URL_EXTERNAL` based on whether the current request's `Host`
+header matches `FRONTEND_URL`'s host (i.e. arrived via the DMZ). The credential-proxy path
+(`UserConnect::AuthService`) always calls `UC_BASE_URL` — those requests originate from Rails
+itself, which is always on the intranet.
 
 ### Enabling/disabling via Rails runner
 
