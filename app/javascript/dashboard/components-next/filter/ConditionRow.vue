@@ -66,7 +66,7 @@ const currentOperator = computed(() =>
 );
 
 const getInputType = (operator, filter) =>
-  operator.inputOverride ?? filter.inputType;
+  operator?.inputOverride ?? filter?.inputType;
 
 const inputType = computed(() =>
   getInputType(currentOperator.value, currentFilter.value)
