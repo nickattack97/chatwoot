@@ -16,7 +16,7 @@ CBZ HelpEngine exposes a REST API built on the Chatwoot v1 API standard. All API
 endpoints return JSON. A full interactive API reference (Swagger UI) is available
 at `/swagger` on the running application.
 
-**Base URL (external):** `https://pg.cbz.co.zw/api/v1`
+**Base URL (external):** `https://pg.cbz.co.zw/helpengine/api/v1`
 **Base URL (internal):** `https://helpengine.cbz.co.zw/api/v1` _(DNS pending — use `https://192.168.230.54/api/v1` until the DNS record is created)_
 
 **OpenAPI spec:** `/swagger/swagger.json`
@@ -359,7 +359,7 @@ They are not called by your code — they are called by the channel provider (Me
 
 The WhatsApp webhook for CBZ HelpEngine:
 ```
-https://pg.cbz.co.zw/webhooks/whatsapp/+263788170276
+https://pg.cbz.co.zw/helpengine/webhooks/whatsapp/+263788170276
 ```
 
 ---
@@ -380,7 +380,7 @@ integration with your website or web application.
     type: 'standard',
   };
   (function(d, t) {
-    var BASE_URL = "https://pg.cbz.co.zw";
+    var BASE_URL = "https://pg.cbz.co.zw/helpengine";
     var g = d.createElement(t), s = d.getElementsByTagName(t)[0];
     g.src = BASE_URL + "/packs/js/sdk.js";
     g.defer = true;
