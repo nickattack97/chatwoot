@@ -8,7 +8,8 @@ class Enterprise::UserconnectAuthController < ApplicationController
     return render_disabled unless uc_sso_enabled?
 
     system_id = GlobalConfigService.load('UC_SYSTEM_ID', nil)
-    redirect_to "#{uc_sso_base_url}/api/v1/auth/saml/login?systemId=#{system_id}", allow_other_host: true
+    redirect_to "#{uc_sso_base_url}/api/v1/auth/saml/login?systemId=#{system_id}&redirectUrl=#{CGI.escape(sso_callback_base_url)}",
+                allow_other_host: true
   end
 
   # GET /auth/uc_callback?token=…&systemId=…
@@ -164,6 +165,17 @@ class Enterprise::UserconnectAuthController < ApplicationController
     frontend_host.present? && request.host.casecmp?(frontend_host)
   rescue URI::InvalidURIError
     false
+  end
+
+  # Base URL UserConnect appends '/saml-callback' to after Entra authentication.
+  # Without an explicit redirectUrl, UC derives this from the Referer but keeps only
+  # scheme+host (GetLeftPart(UriPartial.Authority)), dropping any base path — so a
+  # deployment mounted under /helpengine gets an unroutable callback. Passing it
+  # explicitly takes priority over that derivation.
+  # External requests arrive via the DMZ proxy, which mounts us under FRONTEND_URL's
+  # path; intranet requests reach Rails directly at the host they used, with no prefix.
+  def sso_callback_base_url
+    external_request? ? ENV.fetch('FRONTEND_URL', request.base_url) : request.base_url
   end
 
   def uc_credential_proxy_enabled?
