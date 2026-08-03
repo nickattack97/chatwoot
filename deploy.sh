@@ -19,6 +19,8 @@ rsync -az --delete \
   --exclude='tmp' \
   --exclude='log' \
   --exclude='.git' \
+  --exclude='public/vite' \
+  --exclude='public/packs' \
   -e "ssh -S $SOCKET" \
   . "$SERVER:$REMOTE_SRC/"
 
