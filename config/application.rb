@@ -70,6 +70,11 @@ module Chatwoot
     # Disable PDF/video preview generation as we don't use them
     config.active_storage.previewers = []
 
+    # Drop the X-Runtime response header — it discloses server-side request
+    # timing that aids fingerprinting/timing analysis (see CBZ HelpEngine
+    # Security Assessment, finding #3).
+    config.middleware.delete Rack::Runtime
+
     # Active Record Encryption configuration
     # Required for MFA/2FA features - skip if not using encryption
     if ENV['ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY'].present?

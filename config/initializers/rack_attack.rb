@@ -108,6 +108,18 @@ class Rack::Attack
     end
   end
 
+  ### Prevent Brute-Force Login Attacks on UserConnect (SSO) Credential Sign-In ###
+  throttle('uc_sign_in/ip', limit: 5, period: 5.minutes) do |req|
+    req.ip if req.path_without_extentions == '/api/v1/auth/uc_sign_in' && req.post?
+  end
+
+  throttle('uc_sign_in/username', limit: 10, period: 15.minutes) do |req|
+    if req.path_without_extentions == '/api/v1/auth/uc_sign_in' && req.post?
+      username = req.params['username'].presence || ActionDispatch::Request.new(req.env).params['username'].presence
+      username.to_s.downcase.gsub(/\s+/, '')
+    end
+  end
+
   ## Reset password throttling
   throttle('reset_password/ip', limit: 5, period: 30.minutes) do |req|
     req.ip if req.path_without_extentions == '/auth/password' && req.post?
