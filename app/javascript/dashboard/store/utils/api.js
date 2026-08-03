@@ -6,6 +6,7 @@ import { SESSION_STORAGE_KEYS } from 'dashboard/constants/sessionStorage';
 import { LocalStorage } from 'shared/helpers/localStorage';
 import SessionStorage from 'shared/helpers/sessionStorage';
 import { emitter } from 'shared/helpers/mitt';
+import { absoluteURL } from 'dashboard/helper/URLHelper';
 import {
   ANALYTICS_IDENTITY,
   ANALYTICS_RESET,
@@ -84,7 +85,7 @@ export const clearCookiesOnLogout = () => {
   clearSessionStorageOnLogout();
   const globalConfig = window.globalConfig || {};
   const logoutRedirectLink = globalConfig.LOGOUT_REDIRECT_LINK || '/';
-  window.location = logoutRedirectLink;
+  window.location = absoluteURL(logoutRedirectLink);
 };
 
 export const parseAPIErrorResponse = error => {

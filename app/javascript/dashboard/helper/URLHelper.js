@@ -3,6 +3,21 @@ export const frontendURL = (path, params) => {
   return `/app/${path}${stringifiedParams}`;
 };
 
+// The path the SPA is mounted under (e.g. '/helpengine'), when deployed
+// behind a reverse proxy that strips that prefix before forwarding to Rails.
+// Empty string when mounted at the domain root.
+export const basePath = () => window.chatwootConfig?.basePath || '';
+
+// Prefixes a root-relative in-app path (e.g. '/app/login') with basePath.
+// Use for window.location assignments, which bypass vue-router's own base
+// awareness. Fully-qualified and protocol-relative URLs are returned as-is,
+// so externally-configured links (e.g. LOGOUT_REDIRECT_LINK pointing at
+// another site) are never rewritten.
+export const absoluteURL = path => {
+  if (!path?.startsWith('/') || path.startsWith('//')) return path;
+  return `${basePath()}${path}`;
+};
+
 export const conversationUrl = ({
   accountId,
   activeInbox,

@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { useAccount } from 'dashboard/composables/useAccount';
 import { useMapGetter } from 'dashboard/composables/store';
+import { absoluteURL } from 'dashboard/helper/URLHelper';
 import { useI18n } from 'vue-i18n';
 import ButtonNext from 'next/button/Button.vue';
 import Icon from 'next/icon/Icon.vue';
@@ -41,7 +42,7 @@ const sortedCurrentUserAccounts = computed(() => {
 });
 
 const onChangeAccount = newId => {
-  const accountUrl = `/app/accounts/${newId}/dashboard`;
+  const accountUrl = absoluteURL(`/app/accounts/${newId}/dashboard`);
   window.location.href = accountUrl;
 };
 

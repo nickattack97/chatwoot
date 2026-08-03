@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n';
 import { handleOtpPaste } from 'shared/helpers/clipboard';
 import { parseAPIErrorResponse } from 'dashboard/store/utils/api';
 import { useAccount } from 'dashboard/composables/useAccount';
+import { absoluteURL } from 'dashboard/helper/URLHelper';
 
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import FormInput from 'v3/components/Form/Input.vue';
@@ -84,7 +85,7 @@ const handleVerification = async () => {
       document.cookie = `cw_d_session_info=${encodeURIComponent(JSON.stringify(authData))}; path=/; SameSite=Lax`;
 
       // Redirect to dashboard
-      window.location.href = '/app/';
+      window.location.href = absoluteURL('/app/');
     } else {
       emit('verified', response.data);
     }

@@ -1,8 +1,17 @@
 /* global axios */
+import { basePath } from 'dashboard/helper/URLHelper';
 
 /**
  * Constants and Configuration
  */
+
+const accountIdFromRoute = () => {
+  const { pathname } = window.location;
+  const relativePath = pathname.startsWith(basePath())
+    ? pathname.slice(basePath().length)
+    : pathname;
+  return relativePath.split('/')[3];
+};
 
 // Version for the API endpoint.
 const API_VERSION = 'v1';
@@ -24,7 +33,7 @@ const HEADERS = {
  */
 export async function uploadFile(file, accountId) {
   if (!accountId) {
-    accountId = window.location.pathname.split('/')[3];
+    accountId = accountIdFromRoute();
   }
 
   // Append the file to the FormData instance under the key 'attachment'.
@@ -53,7 +62,7 @@ export async function uploadFile(file, accountId) {
  */
 export async function uploadExternalImage(url, accountId) {
   if (!accountId) {
-    accountId = window.location.pathname.split('/')[3];
+    accountId = accountIdFromRoute();
   }
 
   const { data } = await axios.post(

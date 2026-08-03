@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
+import { absoluteURL } from 'dashboard/helper/URLHelper';
 import { useDropdownContext } from './provider.js';
 
 const props = defineProps({
@@ -31,6 +32,12 @@ const componentIs = computed(() => {
   return 'div';
 });
 
+// Native links are full page navigations, so root-relative in-app paths need
+// the deployment base path. External URLs pass through untouched.
+const nativeHref = computed(() =>
+  componentIs.value === 'a' ? absoluteURL(props.link) : null
+);
+
 const triggerClick = () => {
   if (props.click) {
     props.click();
@@ -48,7 +55,7 @@ const triggerClick = () => {
       :class="{
         'hover:bg-n-alpha-2 rounded-lg w-full gap-3': !$slots.default,
       }"
-      :href="componentIs === 'a' ? props.link : null"
+      :href="nativeHref"
       :to="componentIs === 'router-link' ? props.link : null"
       @click="triggerClick"
     >

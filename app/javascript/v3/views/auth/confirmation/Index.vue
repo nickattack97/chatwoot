@@ -1,5 +1,6 @@
 <script>
 import { DEFAULT_REDIRECT_URL } from 'dashboard/constants/globals';
+import { absoluteURL } from 'dashboard/helper/URLHelper';
 import { verifyPasswordToken } from '../../../api/auth';
 import Spinner from 'shared/components/Spinner.vue';
 
@@ -20,9 +21,9 @@ export default {
         await verifyPasswordToken({
           confirmationToken: this.confirmationToken,
         });
-        window.location = DEFAULT_REDIRECT_URL;
+        window.location = absoluteURL(DEFAULT_REDIRECT_URL);
       } catch (error) {
-        window.location = DEFAULT_REDIRECT_URL;
+        window.location = absoluteURL(DEFAULT_REDIRECT_URL);
       }
     },
   },

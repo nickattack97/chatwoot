@@ -5,6 +5,7 @@ import { useAlert } from 'dashboard/composables';
 import FormInput from '../../../components/Form/Input.vue';
 import NextButton from 'dashboard/components-next/button/Button.vue';
 import { DEFAULT_REDIRECT_URL } from 'dashboard/constants/globals';
+import { absoluteURL } from 'dashboard/helper/URLHelper';
 import { setNewPassword } from '../../../api/auth';
 
 export default {
@@ -37,7 +38,7 @@ export default {
     // If url opened without token
     // redirect to login
     if (!this.resetPasswordToken) {
-      window.location = DEFAULT_REDIRECT_URL;
+      window.location = absoluteURL(DEFAULT_REDIRECT_URL);
     }
   },
   validations: {
@@ -73,7 +74,7 @@ export default {
       };
       setNewPassword(credentials)
         .then(() => {
-          window.location = DEFAULT_REDIRECT_URL;
+          window.location = absoluteURL(DEFAULT_REDIRECT_URL);
         })
         .catch(error => {
           this.showAlertMessage(

@@ -18,6 +18,7 @@ import { SESSION_STORAGE_KEYS } from 'dashboard/constants/sessionStorage';
 import SessionStorage from 'shared/helpers/sessionStorage';
 import { useBranding } from 'shared/composables/useBranding';
 import { getLoginRedirectURL } from 'v3/helpers/AuthHelper';
+import { absoluteURL } from 'dashboard/helper/URLHelper';
 
 // components
 import SimpleDivider from '../../components/Divider/SimpleDivider.vue';
@@ -130,6 +131,11 @@ export default {
     showUcSsoLogin() {
       return this.allowedLoginMethods.includes('userconnect_sso');
     },
+    // Native anchor (full page navigation to a Rails route), so it needs the
+    // deployment base path applied explicitly.
+    ucSsoUrl() {
+      return absoluteURL('/uc/sso');
+    },
     showUcCredentialsLogin() {
       return this.allowedLoginMethods.includes('userconnect_credentials');
     },
@@ -218,7 +224,7 @@ export default {
           }
 
           if (this.email) {
-            window.location = '/app/login';
+            window.location = absoluteURL('/app/login');
           }
           this.loginApi.hasErrored = true;
           this.showAlertMessage(
@@ -236,7 +242,7 @@ export default {
     },
     handleMfaVerified() {
       this.handleImpersonation();
-      window.location = '/app';
+      window.location = absoluteURL('/app');
     },
     handleMfaCancel() {
       this.mfaRequired = false;
@@ -682,7 +688,7 @@ export default {
           <!-- Microsoft SSO redirect button (via UserConnect) -->
           <a
             v-if="showUcSsoLogin"
-            href="/uc/sso"
+            :href="ucSsoUrl"
             class="inline-flex justify-center w-full px-4 py-3 items-center bg-n-background dark:bg-n-solid-3 rounded-md shadow-sm ring-1 ring-inset ring-n-container dark:ring-n-container focus:outline-offset-0 hover:bg-n-alpha-2 dark:hover:bg-n-alpha-2"
           >
             <svg

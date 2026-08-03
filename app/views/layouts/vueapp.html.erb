@@ -33,6 +33,9 @@
     <script>
       window.chatwootConfig = {
         hostURL: '<%= ENV.fetch('FRONTEND_URL', '') %>',
+        basePath: '<%= frontend_base_path %>',
+        apiHost: '<%= frontend_base_path %>',
+        websocketURL: '<%= frontend_websocket_url %>',
         helpCenterURL: '<%= ENV.fetch('HELPCENTER_URL', '') %>',
         fbAppId: '<%= @global_config['FB_APP_ID'] %>',
         instagramAppId: '<%= @global_config['INSTAGRAM_APP_ID'] %>',

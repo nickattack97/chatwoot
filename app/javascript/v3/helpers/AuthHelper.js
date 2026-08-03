@@ -1,6 +1,6 @@
 import Cookies from 'js-cookie';
 import { DEFAULT_REDIRECT_URL } from 'dashboard/constants/globals';
-import { frontendURL } from 'dashboard/helper/URLHelper';
+import { frontendURL, absoluteURL } from 'dashboard/helper/URLHelper';
 
 export const hasAuthCookie = () => {
   return !!Cookies.get('cw_d_session_info');
@@ -42,12 +42,16 @@ export const getLoginRedirectURL = ({
   ssoConversationId,
   user,
 }) => {
+  // Callers assign the result to window.location (a full page navigation), so
+  // these must carry the deployment base path — vue-router's base doesn't apply.
   const accountPath = getSSOAccountPath({ ssoAccountId, user });
   if (accountPath) {
     if (ssoConversationId) {
-      return frontendURL(`${accountPath}/conversations/${ssoConversationId}`);
+      return absoluteURL(
+        frontendURL(`${accountPath}/conversations/${ssoConversationId}`)
+      );
     }
-    return frontendURL(`${accountPath}/dashboard`);
+    return absoluteURL(frontendURL(`${accountPath}/dashboard`));
   }
-  return DEFAULT_REDIRECT_URL;
+  return absoluteURL(DEFAULT_REDIRECT_URL);
 };

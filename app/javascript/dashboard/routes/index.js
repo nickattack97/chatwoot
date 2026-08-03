@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
-import { frontendURL } from '../helper/URLHelper';
+import { frontendURL, basePath, absoluteURL } from '../helper/URLHelper';
 import dashboard from './dashboard/dashboard.routes';
 import store from 'dashboard/store';
 import { validateLoggedInRoutes } from '../helper/routeHelpers';
@@ -10,13 +10,16 @@ import AnalyticsHelper from '../helper/AnalyticsHelper';
 const ONBOARDING_STEPS = ['account_details', 'enrichment'];
 const routes = [...dashboard.routes];
 
-export const router = createRouter({ history: createWebHistory(), routes });
+export const router = createRouter({
+  history: createWebHistory(basePath()),
+  routes,
+});
 
 export const validateAuthenticateRoutePermission = async (to, next) => {
   const { isLoggedIn, getCurrentUser: user } = store.getters;
 
   if (!isLoggedIn) {
-    window.location.assign('/app/login');
+    window.location.assign(absoluteURL('/app/login'));
     return '';
   }
 

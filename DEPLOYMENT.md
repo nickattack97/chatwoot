@@ -87,7 +87,7 @@ Key values to review/update:
 
 | Variable | Notes |
 |---|---|
-| `FRONTEND_URL` | Must be the public URL users access the app from (`https://pg.cbz.co.zw`) |
+| `FRONTEND_URL` | Must be the public URL users access the app from. If the DMZ nginx mounts the app under a sub-path (e.g. `/helpengine` — see below), include it here too: `https://pg.cbz.co.zw/helpengine`. |
 | `POSTGRES_PASSWORD` | Strong random password |
 | `REDIS_PASSWORD` | Strong random password |
 | `SECRET_KEY_BASE` | 128-char hex string — generate with `openssl rand -hex 64` |
@@ -221,6 +221,11 @@ server {
     return 301 https://$host$request_uri;
 }
 
+# Hide the nginx version from the Server response header (fingerprinting).
+# server_tokens is only valid in http/server/location blocks, not events{} —
+# add it here (or to the http{} block in nginx.conf) if not already set globally.
+server_tokens off;
+
 # Main HTTPS server
 server {
     listen 443 ssl http2;
@@ -233,6 +238,9 @@ server {
     ssl_session_cache   shared:SSL:10m;
     ssl_session_timeout 10m;
     ssl_prefer_server_ciphers on;
+
+    # Force HTTPS on future visits and prevent protocol-downgrade/SSL-stripping.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
     gzip on;
     gzip_vary on;
@@ -282,210 +290,88 @@ sudo nginx -t && sudo systemctl enable nginx && sudo systemctl start nginx
 
 ## DMZ nginx configuration (pg.cbz.co.zw)
 
-The DMZ nginx runs on Windows and is internet-facing. It proxies specific paths to
-the production server's local nginx over HTTPS. Only the paths listed below are
-exposed to the internet — all others are blocked.
+The DMZ nginx runs on Windows and is internet-facing. Rather than allowlisting each
+app path individually, it mounts the whole app under a single `/helpengine/` prefix
+(stripped before forwarding to the production server) plus a couple of unprefixed
+static-asset locations. Only the paths listed below are exposed to the internet —
+all others are blocked.
 
-Add these location blocks inside the `pg.cbz.co.zw` server block. The `proxy_ssl_verify`
-directive is already set at the server block level so it is not repeated per location.
+**This requires `FRONTEND_URL` to include the `/helpengine` prefix** (see the env
+var table above) — the app derives its router base path, API/websocket URL prefix,
+and every server-generated absolute link (mailers, webhook registration URLs, the
+SSO redirect target) from `FRONTEND_URL`. Setting it correctly is what makes the
+app's own links line up with the DMZ's prefix-stripping.
+
+New URLs once this is live:
+
+| What | URL |
+|---|---|
+| App login | `https://pg.cbz.co.zw/helpengine/app/login` |
+| WhatsApp webhook (per inbox) | `https://pg.cbz.co.zw/helpengine/webhooks/whatsapp/{phone_number}` — `{phone_number}` is the `Channel::Whatsapp` record's number, digits only, no `+` (e.g. `263771234567`); confirm the exact value per inbox under Settings → Inboxes |
+| UC/Entra SSO redirect (ACS) URI | `https://pg.cbz.co.zw/helpengine/saml-callback` |
+
+**Two things outside this repo must be updated in lockstep with this DMZ config,
+or the app breaks on cutover, not just old bookmarks:**
+- The WhatsApp Business webhook URL above must be registered in Meta's App
+  Dashboard for each WhatsApp inbox — otherwise inbound WhatsApp messages
+  stop arriving.
+- The UC/Entra SSO redirect URI above must be registered for this system —
+  otherwise staff SSO login breaks (there is no native login fallback for
+  this deployment).
+
+Old direct URLs (e.g. `https://pg.cbz.co.zw/app/login`) will 404 under this scheme —
+only `/helpengine/...` URLs are routed once this is live.
+
+Add these location blocks inside the `pg.cbz.co.zw` server block.
 
 ```nginx
-# ── CBZ HelpEngine ──────────────────────────────────────────
-
-location /cable {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Upgrade $http_upgrade;
-    proxy_set_header   Connection "Upgrade";
-    proxy_set_header   Host $host;
-    proxy_set_header   X-Real-IP $remote_addr;
-    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header   X-Forwarded-Proto $scheme;
-    proxy_read_timeout 3600s;
-    proxy_send_timeout 3600s;
+# ── CBZ HelpEngine ─────────────────────────────────────────
+# Static assets — cache aggressively. Unprefixed (no /helpengine) — Vite
+# builds these paths at the domain root and the app doesn't rewrite them.
+location ~* ^/(vite|assets|brand-assets|dashboard|audio|integrations)/ {
+    proxy_pass          https://192.168.230.54;
+    proxy_http_version  1.1;
+    proxy_ssl_verify     off;
+    proxy_set_header    Host              $host;
+    proxy_set_header    X-Real-IP         $remote_addr;
+    proxy_set_header    X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header    X-Forwarded-Proto $scheme;
+    expires             7d;
+    add_header          Cache-Control "public, immutable";
 }
 
-location /app {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Host $host;
-    proxy_set_header   X-Real-IP $remote_addr;
-    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header   X-Forwarded-Proto $scheme;
-}
-
-location /auth {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Host $host;
-    proxy_set_header   X-Real-IP $remote_addr;
-    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header   X-Forwarded-Proto $scheme;
-}
-
-location /api {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Host $host;
-    proxy_set_header   X-Real-IP $remote_addr;
-    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header   X-Forwarded-Proto $scheme;
-}
-
-location /enterprise {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Host $host;
-    proxy_set_header   X-Real-IP $remote_addr;
-    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header   X-Forwarded-Proto $scheme;
-}
-
-location /webhooks/whatsapp {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Host $host;
-    proxy_set_header   X-Real-IP $remote_addr;
-    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header   X-Forwarded-Proto $scheme;
-}
-
-location /bot {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Host $host;
-    proxy_set_header   X-Real-IP $remote_addr;
-    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header   X-Forwarded-Proto $scheme;
-}
-
-location /rails/active_storage {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Host $host;
-    proxy_set_header   X-Real-IP $remote_addr;
-    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header   X-Forwarded-Proto $scheme;
-}
-
-location /widget {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Host $host;
-    proxy_set_header   X-Real-IP $remote_addr;
-    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header   X-Forwarded-Proto $scheme;
-}
-
-location /survey {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Host $host;
-    proxy_set_header   X-Real-IP $remote_addr;
-    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header   X-Forwarded-Proto $scheme;
-}
-
-location /.well-known {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Host $host;
-    proxy_set_header   X-Real-IP $remote_addr;
-    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header   X-Forwarded-Proto $scheme;
-}
-
-location /vite {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Host $host;
-    proxy_set_header   X-Real-IP $remote_addr;
-    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header   X-Forwarded-Proto $scheme;
-    expires            1y;
-    add_header         Cache-Control "public, immutable";
-}
-
+# Root-level static files
 location ~* ^/(manifest\.json|sw\.js|favicon.*|apple.*|android.*|ms-icon.*|browserconfig\.xml|robots\.txt)$ {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Host $host;
-    proxy_set_header   X-Real-IP $remote_addr;
-    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header   X-Forwarded-Proto $scheme;
-    expires            7d;
-    add_header         Cache-Control "public";
+    proxy_pass          https://192.168.230.54;
+    proxy_http_version  1.1;
+    proxy_ssl_verify     off;
+    proxy_set_header    Host              $host;
+    proxy_set_header    X-Real-IP         $remote_addr;
+    proxy_set_header    X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header    X-Forwarded-Proto $scheme;
+    expires             7d;
+    add_header          Cache-Control "public";
 }
 
-location /brand-assets {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Host $host;
-    proxy_set_header   X-Real-IP $remote_addr;
-    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header   X-Forwarded-Proto $scheme;
-    expires            7d;
-    add_header         Cache-Control "public";
-}
-
-location /dashboard {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Host $host;
-    proxy_set_header   X-Real-IP $remote_addr;
-    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header   X-Forwarded-Proto $scheme;
-    expires            7d;
-    add_header         Cache-Control "public";
-}
-
-location /integrations {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Host $host;
-    proxy_set_header   X-Real-IP $remote_addr;
-    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header   X-Forwarded-Proto $scheme;
-    expires            7d;
-    add_header         Cache-Control "public";
-}
-
-location /health {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Host $host;
-}
-
-# UserConnect SSO initiation
-location /uc {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Host $host;
-    proxy_set_header   X-Real-IP $remote_addr;
-    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header   X-Forwarded-Proto $scheme;
-}
-
-# UserConnect SAML callback (Microsoft Entra redirects here after auth)
-location /saml-callback {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Host $host;
-    proxy_set_header   X-Real-IP $remote_addr;
-    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header   X-Forwarded-Proto $scheme;
-}
-
-# Notification sounds
-location /audio {
-    proxy_pass         https://192.168.230.54;
-    proxy_http_version 1.1;
-    proxy_set_header   Host $host;
-    proxy_set_header   X-Real-IP $remote_addr;
-    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header   X-Forwarded-Proto $scheme;
-    expires            7d;
-    add_header         Cache-Control "public";
+# Everything else — HelpEngine (app, api, auth, cable, webhooks, widget,
+# survey, uc/saml-callback, health, packs/sdk.js, etc.) — prefix stripped
+# before forwarding, so the backend sees the same root-relative paths it
+# always has. Requires FRONTEND_URL to include /helpengine (see above) so
+# the app's own generated links match this prefix.
+location /helpengine/ {
+    proxy_pass          https://192.168.230.54;
+    proxy_buffering     off;
+    proxy_ssl_verify     off;
+    proxy_http_version  1.1;
+    rewrite ^/helpengine/(.*) /$1 break;
+    proxy_set_header    Host                $host;
+    proxy_set_header    X-Real-IP           $remote_addr;
+    proxy_set_header    X-Forwarded-For     $proxy_add_x_forwarded_for;
+    proxy_set_header    X-Forwarded-Proto   $scheme;
+    proxy_set_header    Upgrade             $http_upgrade;
+    proxy_set_header    Connection          $connection_upgrade;
+    proxy_read_timeout  3600s;
+    proxy_send_timeout  3600s;
 }
 ```
 

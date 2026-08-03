@@ -1,5 +1,6 @@
 <script setup>
 import { useAdmin } from 'dashboard/composables/useAdmin';
+import { absoluteURL } from 'dashboard/helper/URLHelper';
 import Icon from 'next/icon/Icon.vue';
 import ButtonV4 from 'next/button/Button.vue';
 
@@ -69,7 +70,7 @@ const { isAdmin } = useAdmin();
       </span>
     </template>
     <template v-else-if="!isOnChatwootCloud && isSuperAdmin">
-      <a href="/super_admin" class="block w-full">
+      <a :href="absoluteURL('/super_admin')" class="block w-full">
         <ButtonV4 solid blue md class="w-full">
           {{ $t(`${featurePrefix}.PAYWALL.UPGRADE_NOW`) }}
         </ButtonV4>

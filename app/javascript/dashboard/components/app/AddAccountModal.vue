@@ -4,6 +4,7 @@ import { mapGetters } from 'vuex';
 import { useVuelidate } from '@vuelidate/core';
 import { useAlert } from 'dashboard/composables';
 import NextButton from 'dashboard/components-next/button/Button.vue';
+import { absoluteURL } from 'dashboard/helper/URLHelper';
 
 export default {
   components: {
@@ -49,7 +50,7 @@ export default {
         });
         this.$emit('closeAccountCreateModal');
         useAlert(this.$t('CREATE_ACCOUNT.API.SUCCESS_MESSAGE'));
-        window.location = `/app/accounts/${account_id}/dashboard`;
+        window.location = absoluteURL(`/app/accounts/${account_id}/dashboard`);
       } catch (error) {
         if (error.response.status === 422) {
           useAlert(this.$t('CREATE_ACCOUNT.API.EXIST_MESSAGE'));
