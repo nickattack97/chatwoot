@@ -102,5 +102,28 @@ Rails.application.configure do
   # :sendgrid for Sendgrid
   config.action_mailbox.ingress = ENV.fetch('RAILS_INBOUND_EMAIL_SERVICE', 'relay').to_sym
 
-  Rails.application.routes.default_url_options = { host: ENV['FRONTEND_URL'] }
+  # FRONTEND_URL may carry a sub-path (e.g. https://pg.cbz.co.zw/helpengine) when the DMZ nginx
+  # mounts the app under a prefix it strips before proxying. Rails never sees that prefix on a
+  # request, so generated URLs have to add it back. Passing the whole URL as :host only works for
+  # URLs built from these defaults alone — a per-request URL (ActiveStorage's blob → disk-service
+  # redirect, built from the request's protocol/host/port) overrides :host and loses the path,
+  # which is why every image and voice note showed "no longer available" under /helpengine.
+  # Splitting host and :script_name is the form Rails expects for a sub-path mount and the
+  # script_name survives that merge.
+  frontend_uri = begin
+    URI.parse(ENV.fetch('FRONTEND_URL', ''))
+  rescue URI::InvalidURIError
+    nil
+  end
+
+  Rails.application.routes.default_url_options =
+    if frontend_uri&.host.present?
+      port = frontend_uri.port && [80, 443].exclude?(frontend_uri.port) ? ":#{frontend_uri.port}" : ''
+      {
+        host: "#{frontend_uri.scheme}://#{frontend_uri.host}#{port}",
+        script_name: frontend_uri.path.to_s.chomp('/').presence
+      }.compact
+    else
+      { host: ENV['FRONTEND_URL'] }
+    end
 end

@@ -87,7 +87,7 @@ Key values to review/update:
 
 | Variable | Notes |
 |---|---|
-| `FRONTEND_URL` | Must be the public URL users access the app from. If the DMZ nginx mounts the app under a sub-path (e.g. `/helpengine` — see below), include it here too: `https://pg.cbz.co.zw/helpengine`. |
+| `FRONTEND_URL` | Must be the public URL users access the app from. If the DMZ nginx mounts the app under a sub-path (e.g. `/helpengine` — see below), include it here too: `https://pg.cbz.co.zw/helpengine`. `config/environments/production.rb` splits it into `host` + `script_name` for `default_url_options`, so every Rails-generated URL — including ActiveStorage media redirects (`/rails/active_storage/disk/…`) and the CSAT survey page's API base — carries the prefix. No `/rails/` location is needed on the DMZ nginx. |
 | `POSTGRES_PASSWORD` | Strong random password |
 | `REDIS_PASSWORD` | Strong random password |
 | `SECRET_KEY_BASE` | 128-char hex string — generate with `openssl rand -hex 64` |
