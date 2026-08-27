@@ -10,11 +10,13 @@ module SafeFetch
   # destination hosts for server-initiated outbound requests. Anything not named here still
   # goes through ssrf_filter unchanged.
   #
-  # Configure with a comma-separated list of "host" or "host:port" entries:
+  # Configure with a comma-separated list of "host" or "host:port" entries — here the UAT
+  # and production WA-Bot-Engine hosts, both behind nginx's /wabot-uat and /wabot routes:
   #
-  #   SAFE_FETCH_ALLOWED_INTERNAL_HOSTS=192.168.3.150:5005
+  #   SAFE_FETCH_ALLOWED_INTERNAL_HOSTS=192.168.3.150:5005,192.168.230.39:5005
   #
-  # Prefer host:port over a bare host so the allowance is as narrow as possible.
+  # Prefer host:port over a bare host so the allowance is as narrow as possible. The list is
+  # per-deployment: a separate Chatwoot instance needs its own value, not just this code.
   module AllowedInternalHosts
     ENV_KEY = 'SAFE_FETCH_ALLOWED_INTERNAL_HOSTS'.freeze
 
