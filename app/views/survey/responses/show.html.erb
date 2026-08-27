@@ -6,6 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
     <script>
       window.globalConfig = <%= raw @global_config.to_json %>
+      // The survey page is opened from a WhatsApp template button, outside the SPA, so it never
+      // received the base-path config the dashboard layout threads in. Under a sub-path deploy
+      // (FRONTEND_URL=https://host/helpengine) its root-relative API calls fell through the DMZ
+      // nginx catch-all and the page showed "Could not connect to Woot Server".
+      window.chatwootConfig = {
+        hostURL: '<%= ENV.fetch('FRONTEND_URL', '') %>',
+        basePath: '<%= frontend_base_path %>',
+        apiHost: '<%= frontend_base_path %>'
+      }
     </script>
     <%= vite_client_tag %>
     <%= vite_javascript_tag 'survey' %>
