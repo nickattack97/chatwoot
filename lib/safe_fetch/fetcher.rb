@@ -32,7 +32,7 @@ class SafeFetch::Fetcher
     response = nil
     bytes_written = 0
 
-    SsrfFilter.public_send(options.method, options.url, **options.request_options) do |res|
+    handler = lambda do |res|
       response = res
       next unless res.is_a?(Net::HTTPSuccess)
 
@@ -40,7 +40,33 @@ class SafeFetch::Fetcher
       bytes_written = write_response_body(res, tempfile, bytes_written)
     end
 
+    if SafeFetch::AllowedInternalHosts.allow?(options.uri)
+      request_allowed_internal_host(&handler)
+    else
+      SsrfFilter.public_send(options.method, options.url, **options.request_options, &handler)
+    end
+
     response
+  end
+
+  # Bypasses ssrf_filter for hosts an operator has explicitly allow-listed. See
+  # SafeFetch::AllowedInternalHosts for why this exists and how narrow it is.
+  def request_allowed_internal_host
+    uri = options.uri
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl      = uri.scheme == 'https'
+    http.open_timeout = options.open_timeout
+    http.read_timeout = options.read_timeout
+
+    http.start { |conn| conn.request(build_internal_request(uri)) { |res| yield res } }
+  end
+
+  def build_internal_request(uri)
+    request = Net::HTTP.const_get(options.method.to_s.capitalize).new(uri)
+    options.headers&.each { |key, value| request[key] = value }
+    request.body = options.body if options.body.present?
+    options.request_options[:request_proc]&.call(request)
+    request
   end
 
   def validate_content_type!(content_type)
