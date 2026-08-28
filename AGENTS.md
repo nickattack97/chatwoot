@@ -111,3 +111,25 @@ Practical checklist for any change impacting core logic or public APIs
 ## Branding / White-labeling note
 
 - For user-facing strings that currently contain "Chatwoot" but should adapt to branded/self-hosted installs, prefer applying `replaceInstallationName` from `shared/composables/useBranding` in the UI layer (for example tooltip and suggestion labels) instead of adding hardcoded brand-specific copy.
+
+## CBZ fork customisations (`cbz-customisations` branch)
+
+Things this fork does that upstream doesn't — check before assuming upstream behaviour:
+
+- **Sub-path deployment (`/helpengine`)** — the DMZ nginx strips the prefix; Rails never
+  sees it. `FRONTEND_URL` includes the prefix and is the single source of truth:
+  `application_helper` derives `frontend_base_path` for the SPAs, and
+  `config/environments/production.rb` splits it into `host` + `script_name` for
+  `default_url_options` so *per-request* URLs (ActiveStorage disk redirects) keep the
+  prefix. Every root-relative URL added anywhere — JS `fetch('/…')`, a new Rails
+  `*_url` — must go through `basePath()` / `absoluteURL()` on the client or `url_for` on
+  the server. Three separate leaks of this class have been fixed (dashboard API, CSAT
+  survey page, media). When something under Chatwoot 301s to `www.cbz.co.zw`, this is
+  why.
+- **`SafeFetch::AllowedInternalHosts`** — env-driven allow-list
+  (`SAFE_FETCH_ALLOWED_INTERNAL_HOSTS`) that lets outgoing webhooks reach named private
+  hosts despite `ssrf_filter`. An allow-list, never a bypass; keep it `host:port`.
+- **UC/Entra SAML SSO** with no native login fallback; `uc_sign_in` Rack::Attack throttles.
+- **Deployment** is `./deploy.sh` (rsync + docker build on the server). See
+  `DEPLOYMENT.md`, especially "WA-Bot-Engine integration" for the inbox/webhook settings
+  that fail silently when wrong.

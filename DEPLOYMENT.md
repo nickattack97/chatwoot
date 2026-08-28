@@ -88,6 +88,7 @@ Key values to review/update:
 | Variable | Notes |
 |---|---|
 | `FRONTEND_URL` | Must be the public URL users access the app from. If the DMZ nginx mounts the app under a sub-path (e.g. `/helpengine` — see below), include it here too: `https://pg.cbz.co.zw/helpengine`. `config/environments/production.rb` splits it into `host` + `script_name` for `default_url_options`, so every Rails-generated URL — including ActiveStorage media redirects (`/rails/active_storage/disk/…`) and the CSAT survey page's API base — carries the prefix. No `/rails/` location is needed on the DMZ nginx. |
+| `SAFE_FETCH_ALLOWED_INTERNAL_HOSTS` | Comma-separated `host` or `host:port` entries Chatwoot may call despite its SSRF guard, which refuses any private address (`ssrf_filter`: "has no public ip addresses"). Needed for the outgoing webhook to WA-Bot-Engine: `192.168.3.150:5005,192.168.230.39:5005` (UAT and prod bots). Fork patch (`SafeFetch::AllowedInternalHosts`); unset allows nothing; the list is **per instance** — a new Chatwoot deployment needs its own value. |
 | `POSTGRES_PASSWORD` | Strong random password |
 | `REDIS_PASSWORD` | Strong random password |
 | `SECRET_KEY_BASE` | 128-char hex string — generate with `openssl rand -hex 64` |
@@ -321,6 +322,33 @@ or the app breaks on cutover, not just old bookmarks:**
 
 Old direct URLs (e.g. `https://pg.cbz.co.zw/app/login`) will 404 under this scheme —
 only `/helpengine/...` URLs are routed once this is live.
+
+> **WhatsApp banking deployments (WA-Bot-Engine in front):** Meta's webhook is
+> registered against **WA-Bot-Engine**, not Chatwoot — the engine forwards each
+> customer's traffic to Chatwoot's internal address while that customer has a
+> live-agent session. The public `/helpengine/webhooks/whatsapp/…` URL above is
+> therefore unused in that topology (and is unauthenticated for this channel:
+> no app secret, not embedded-signup). See the next section.
+
+### WA-Bot-Engine integration (CBZ WhatsApp banking)
+
+Settings that must be exactly right, all found the hard way on 2026-08-27/28.
+Each one fails **silently** — no error, no log — so verify them rather than
+assume.
+
+| Setting | Value | Why |
+|---|---|---|
+| Outgoing webhook URL (Settings → Integrations → Webhooks) | The engine's **prefix-free** Kestrel path: `http://192.168.3.150:5005/webhook/chatwoot` (UAT), `http://192.168.230.39:5005/webhook/chatwoot` (prod). Events: `conversation_created`, `conversation_status_changed`, `conversation_updated`. | The engine's `InternalOnlyFilter` 404s any request carrying the `/wabot…` path base, and Chatwoot cannot reach `pg.cbz.co.zw` from inside (no NAT hairpin). Before this was fixed the webhook had never delivered once. |
+| Webhook secret | Copy into the engine's `Chatwoot:WebhookSecret`. | The engine verifies `X-Chatwoot-Signature` and rejects everything without it. |
+| `.env` → `SAFE_FETCH_ALLOWED_INTERNAL_HOSTS` | `192.168.3.150:5005,192.168.230.39:5005` | See env table — Chatwoot's SSRF guard refuses private addresses. |
+| Inbox → `lock_to_single_conversation` | **OFF** | On, every contact is pinned to one conversation forever; Chatwoot sends one CSAT per conversation, so every customer is surveyed exactly once, ever. This was the root cause of "CSAT stopped working" — 1,058 contacts, 1,058 conversations. |
+| Inbox → greeting | **OFF** | WA-Bot-Engine sends the handoff greeting (personalised, with the END CHAT instruction and PIN warning). Both on = two greetings. |
+| Inbox → CSAT | On, **created only after `FRONTEND_URL` is final** | The "rate us" button URL is baked into the approved template; a later sub-path move dead-ends it. Ratings then 301 to www.cbz.co.zw with no error anywhere. The API token cannot delete templates on this WABA, so each re-version leaves the old one in Business Manager. |
+| Automation "Mark Pending on Resolution" | Review | Labels every resolved conversation `pending-customer` — triage noise at scale. |
+
+Operational notes: Puma runs single-mode (5 threads) unless `WEB_CONCURRENCY` is
+set — set `WEB_CONCURRENCY=4` before any real agent load. No database backup
+exists on the host as of 2026-08-28; the Postgres volume sits on the root LV.
 
 Add these location blocks inside the `pg.cbz.co.zw` server block.
 
