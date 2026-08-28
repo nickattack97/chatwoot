@@ -129,6 +129,16 @@ Things this fork does that upstream doesn't — check before assuming upstream b
 - **`SafeFetch::AllowedInternalHosts`** — env-driven allow-list
   (`SAFE_FETCH_ALLOWED_INTERNAL_HOSTS`) that lets outgoing webhooks reach named private
   hosts despite `ssrf_filter`. An allow-list, never a bypass; keep it `host:port`.
+- **WhatsApp runs behind WA-Bot-Engine as a proxy** — Meta's webhook points at the engine,
+  not Chatwoot; the engine forwards each customer's traffic to Chatwoot's internal
+  `/webhooks/whatsapp/{phone}` (signed with the Meta app secret) during a live-agent session.
+  Consequences that bite: the channel must be `source=embedded_signup` **and** have an
+  `app_secret` set, or forwards 401; a `reauthorization_required` flag (the red "disconnected"
+  banner) makes `WhatsappEventsJob` silently drop **every** forward — clear it with
+  `channel.reauthorized!`; and **never** click **Register Webhook / Reconfigure / Reconnect**
+  (each re-registers the WABA webhook to Chatwoot and hijacks Meta traffic off the engine).
+  "Webhook URL mismatch" and "Configuration ID not configured" are expected, not bugs. Full
+  detail + fixes in `DEPLOYMENT.md` → "WA-Bot-Engine integration (CBZ WhatsApp banking)".
 - **UC/Entra SAML SSO** with no native login fallback; `uc_sign_in` Rack::Attack throttles.
 - **Deployment** is `./deploy.sh` (rsync + docker build on the server). See
   `DEPLOYMENT.md`, especially "WA-Bot-Engine integration" for the inbox/webhook settings

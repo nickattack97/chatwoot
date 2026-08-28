@@ -325,10 +325,11 @@ only `/helpengine/...` URLs are routed once this is live.
 
 > **WhatsApp banking deployments (WA-Bot-Engine in front):** Meta's webhook is
 > registered against **WA-Bot-Engine**, not Chatwoot — the engine forwards each
-> customer's traffic to Chatwoot's internal address while that customer has a
-> live-agent session. The public `/helpengine/webhooks/whatsapp/…` URL above is
-> therefore unused in that topology (and is unauthenticated for this channel:
-> no app secret, not embedded-signup). See the next section.
+> customer's traffic to Chatwoot's **internal** address while that customer has a
+> live-agent session, signing every forward with the Meta app secret. The public
+> `/helpengine/webhooks/whatsapp/…` URL above is therefore not called by Meta in
+> this topology. The channel is `source=embedded_signup` **with** an `app_secret`
+> set (both required — see the next section); do not describe it as unauthenticated.
 
 ### WA-Bot-Engine integration (CBZ WhatsApp banking)
 
@@ -341,6 +342,10 @@ assume.
 | Outgoing webhook URL (Settings → Integrations → Webhooks) | The engine's **prefix-free** Kestrel path: `http://192.168.3.150:5005/webhook/chatwoot` (UAT), `http://192.168.230.39:5005/webhook/chatwoot` (prod). Events: `conversation_created`, `conversation_status_changed`, `conversation_updated`. | The engine's `InternalOnlyFilter` 404s any request carrying the `/wabot…` path base, and Chatwoot cannot reach `pg.cbz.co.zw` from inside (no NAT hairpin). Before this was fixed the webhook had never delivered once. |
 | Webhook secret | Copy into the engine's `Chatwoot:WebhookSecret`. | The engine verifies `X-Chatwoot-Signature` and rejects everything without it. |
 | `.env` → `SAFE_FETCH_ALLOWED_INTERNAL_HOSTS` | `192.168.3.150:5005,192.168.230.39:5005` | See env table — Chatwoot's SSRF guard refuses private addresses. |
+| Channel `provider_config['source']` | `embedded_signup` | Stops Chatwoot auto-re-registering the WABA webhook to **itself** (`should_auto_setup_webhooks?` is false only for embedded_signup), which would hijack all Meta traffic off the engine. Set via `rails runner` `update_column` (skips callbacks). **Coupled side effect:** it also turns ON inbound signature verification — see next row. |
+| Channel `provider_config['app_secret']` | = the Meta app secret (the engine's `Meta:AppSecret`, e.g. `5b68b157…`) | Because `source=embedded_signup`, Chatwoot **401-rejects** any forward without a valid `X-Hub-Signature-256`. The engine signs each forward with `Meta:AppSecret`; if `app_secret` is unset, every forwarded receipt **and** message is rejected → read ticks stay grey and mid-session inbound never appears. |
+| Channel reauthorization flag (Redis, `Reauthorizable`) | must stay **cleared** | If the inbox shows the red "disconnected / reauthorize" banner (sidebar `!`), `Webhooks::WhatsappEventsJob` bails at `channel_is_inactive?` and **silently drops EVERY forwarded webhook** — messages and receipts — while the engine still gets HTTP 200. Clear it: `Channel::Whatsapp.find_by(phone_number: "+263789352655").reauthorized!`. Prevent recurrence by setting the globals in the next row. |
+| Globals `WHATSAPP_APP_ID` + `WHATSAPP_APP_SECRET` (`InstallationConfig`) | real Meta **App ID** (not the WABA id) + the app secret | Chatwoot builds a Meta app-access-token `"#{APP_ID}|#{APP_SECRET}"` for template-sync / reconnect; an empty `WHATSAPP_APP_ID` is the "WhatsApp App ID is not configured" banner and its failed calls can re-trip the reauthorization flag above. Not on the message path, but set them so nothing re-flags the channel. |
 | Inbox → `lock_to_single_conversation` | **OFF** | On, every contact is pinned to one conversation forever; Chatwoot sends one CSAT per conversation, so every customer is surveyed exactly once, ever. This was the root cause of "CSAT stopped working" — 1,058 contacts, 1,058 conversations. |
 | Inbox → greeting | **OFF** | WA-Bot-Engine sends the handoff greeting (personalised, with the END CHAT instruction and PIN warning). Both on = two greetings. |
 | Inbox → CSAT | On, **created only after `FRONTEND_URL` is final** | The "rate us" button URL is baked into the approved template; a later sub-path move dead-ends it. Ratings then 301 to www.cbz.co.zw with no error anywhere. The API token cannot delete templates on this WABA, so each re-version leaves the old one in Business Manager. |
@@ -349,6 +354,32 @@ assume.
 Operational notes: Puma runs single-mode (5 threads) unless `WEB_CONCURRENCY` is
 set — set `WEB_CONCURRENCY=4` before any real agent load. No database backup
 exists on the host as of 2026-08-28; the Postgres volume sits on the root LV.
+
+#### UI buttons that silently break the topology — NEVER click
+
+Each re-registers the WABA webhook at Meta to Chatwoot's own
+`{FRONTEND_URL}/webhooks/whatsapp/{phone}` URL, overriding the engine and killing
+all inbound WhatsApp (the exact hijack from 2026-08-28 cutover):
+
+- **"Register Webhook"** — inbox → **Account Health** (beside Webhook Configuration) →
+  `WebhookSetupService#register_callback` → `subscribe_waba_webhook(waba_id, chatwoot_url)`.
+- **"Reconfigure"** — inbox → **Configuration** → WhatsApp Embedded Signup → embedded-signup re-setup.
+- **"Click here to reconnect"** — the red disconnected banner → reauthorization → same re-setup.
+
+If Meta's webhook ever gets pointed back at Chatwoot, repoint it to the engine:
+`POST /{waba-id}/subscribed_apps` with `override_callback_uri=https://pg.cbz.co.zw/wabot/webhook/whatsapp`
+and the engine's `Meta:VerifyToken`.
+
+#### Health warnings that are EXPECTED — do NOT try to "fix" them
+
+Permanent, correct side effects of running Chatwoot behind the engine:
+
+- **Account Health → "Webhook URL mismatch"** — the health check compares Meta's registered
+  callback against Chatwoot's *own* expected URL (`build_expected_webhook_url`), but Meta points
+  at the engine by design, so it always shows a mismatch. This is the desired state.
+- **Configuration → "WhatsApp Configuration ID is not configured"** — the global
+  `WHATSAPP_CONFIGURATION_ID` only feeds the embedded-signup Reconfigure flow (not messaging).
+  Leaving it unset is fine and keeps that hijack button inert.
 
 Add these location blocks inside the `pg.cbz.co.zw` server block.
 
@@ -440,6 +471,13 @@ docker compose -f docker-compose.production.yaml exec rails bundle exec rails ru
 ---
 
 ## WhatsApp inbox setup
+
+> ⚠️ **This is the STANDALONE flow (Chatwoot is the webhook endpoint).** It does **NOT**
+> apply to the CBZ WhatsApp-banking deployment, where WA-Bot-Engine sits in front and owns
+> Meta's webhook. In that topology steps 3–5 are wrong and **step 5 (Register Webhook) will
+> hijack Meta traffic off the engine** — follow "WA-Bot-Engine integration (CBZ WhatsApp
+> banking)" above instead (channel `source=embedded_signup` + `app_secret`, Meta's webhook
+> registered against the engine, never click Register Webhook / Reconfigure / Reconnect).
 
 1. Create a WhatsApp inbox in Settings → Inboxes → Add Inbox → WhatsApp Cloud
 2. Enter the phone number, WhatsApp Business Account ID, API token, and verify token
