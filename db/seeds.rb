@@ -4,6 +4,8 @@ ConfigLoader.new.process
 
 ## Seeds productions
 if Rails.env.production?
+  # CBZ HelpEngine: UserConnect sign-in on, pointed at this environment's UserConnect (Helpengine::Defaults)
+  Helpengine::Defaults.apply_installation!
   # Setup Onboarding flow
   Redis::Alfred.set(Redis::Alfred::CHATWOOT_INSTALLATION_ONBOARDING, true)
 end

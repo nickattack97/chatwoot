@@ -1,0 +1,172 @@
+# CBZ HelpEngine defaults: what every new account and every new WhatsApp inbox starts with (Helpengine::Defaults).
+# Applied once, when the account or inbox is created; an existing record with the same key is never changed, so
+# anything an administrator edits stays edited. db/seeds/cbz_configs.rb adds whatever is missing to an existing install.
+#
+# Customer-facing text here goes out on WhatsApp. Keep it within the WhatsApp Business Messaging Policy: never ask for
+# a full account or card number, PIN, password or OTP, and never send a placeholder (the contact numbers below are the
+# ones WA-Bot-Engine already gives customers).
+
+labels:
+  - { title: account-inquiry,   color: '#1F93FF', description: 'Account balance, statements and general account queries' }
+  - { title: loan,              color: '#FF7E00', description: 'Loan applications, repayments and loan-related queries' }
+  - { title: card-services,     color: '#9B59B6', description: 'Debit and credit card issues, activations and limits' }
+  - { title: complaint,         color: '#E74C3C', description: 'Customer complaints requiring resolution' }
+  - { title: fraud,             color: '#C0392B', description: 'Suspected fraud, scams or unauthorised transactions' }
+  - { title: technical-support, color: '#3498DB', description: 'Digital banking app and internet banking technical issues' }
+  - { title: internet-banking,  color: '#2980B9', description: 'Internet banking platform support' }
+  - { title: mobile-banking,    color: '#27AE60', description: 'CBZ Touch mobile app support' }
+  - { title: whatsapp-banking,  color: '#25D366', description: 'Handed over from the WhatsApp banking bot' }
+  - { title: urgent,            color: '#E74C3C', description: 'High-priority issues requiring immediate attention' }
+  - { title: pending-customer,  color: '#F39C12', description: 'Waiting for the customer to respond' }
+  - { title: escalated,         color: '#8E44AD', description: 'Escalated to a senior team or specialist' }
+  - { title: feedback,          color: '#16A085', description: 'Customer feedback and suggestions' }
+
+custom_attributes:
+  - attribute_model: conversation_attribute
+    attribute_key: account_last4
+    attribute_display_name: 'Account (last 4 digits)'
+    attribute_display_type: text
+    attribute_description: 'Last four digits only. Never record a full account or card number here.'
+  - attribute_model: conversation_attribute
+    attribute_key: branch
+    attribute_display_name: Branch
+    attribute_display_type: list
+    attribute_values: ['Head Office', 'Harare CBD', 'Bulawayo', 'Mutare', 'Gweru', 'Masvingo', 'Chinhoyi', 'Bindura', 'Kariba', 'Victoria Falls']
+  - attribute_model: conversation_attribute
+    attribute_key: product_type
+    attribute_display_name: 'Product Type'
+    attribute_display_type: list
+    attribute_values: ['Current Account', 'Savings Account', 'Fixed Deposit', 'Personal Loan', 'Mortgage', 'Business Loan', 'Debit Card', 'Credit Card', 'Internet Banking', 'CBZ Touch']
+  - attribute_model: conversation_attribute
+    attribute_key: reference_number
+    attribute_display_name: 'Transaction Reference'
+    attribute_display_type: text
+  - attribute_model: conversation_attribute
+    attribute_key: escalated
+    attribute_display_name: Escalated
+    attribute_display_type: checkbox
+  - attribute_model: contact_attribute
+    attribute_key: customer_id
+    attribute_display_name: 'Customer ID'
+    attribute_display_type: text
+  - attribute_model: contact_attribute
+    attribute_key: account_type
+    attribute_display_name: 'Account Type'
+    attribute_display_type: list
+    attribute_values: ['Personal', 'Business', 'Corporate', 'Premium']
+
+canned_responses:
+  - short_code: greet
+    content: "Hello! Thank you for contacting CBZ Bank. My name is {{agent.name}} and I'm here to assist you today. How can I help you?"
+  - short_code: hold
+    content: 'Thank you for your patience. Please allow me a moment to look into this for you.'
+  - short_code: identify
+    content: "To help you, please confirm the full name and the mobile number registered on your CBZ account. Never share your PIN, password, OTP or full card or account number in this chat; CBZ will never ask for them."
+  - short_code: fraud-alert
+    content: "We take this very seriously. If you see activity on your account that you did not make, please call our Contact Centre on +263 867 700 4050 (toll-free 460/1) straight away. I am escalating this conversation to our fraud team now."
+  - short_code: hours
+    content: 'Our WhatsApp support is available Monday to Friday, 8:00 AM to 5:00 PM, and Saturday, 8:00 AM to 1:00 PM (CAT). Outside these hours, please leave your message and we will respond on the next business day.'
+  - short_code: escalate
+    content: "I understand this needs specialist attention. I'm escalating your query to our senior support team, who will be in touch with you shortly."
+  - short_code: resolve
+    content: "I'm glad we could help you today. If you need anything else, please don't hesitate to contact us again. Have a great day!"
+  - short_code: callback
+    content: "We'd like to call you back to help further. Please share a convenient time and our team will call you on the number you are chatting from."
+  - short_code: internet-banking-reset
+    content: 'To reset your internet banking credentials, please visit your nearest CBZ branch with a valid ID, or call our Contact Centre on +263 867 700 4050 (toll-free 460/1). For your security we cannot reset credentials in this chat.'
+  - short_code: card-blocked
+    content: 'Your card may have been blocked for your security. To unblock it, please call our Contact Centre on +263 867 700 4050 (toll-free 460/1) or visit your nearest CBZ branch.'
+  - short_code: loan-inquiry
+    content: 'Thank you for your interest in a CBZ loan. To get started, please visit your nearest branch with proof of income, a valid ID and 3 months of bank statements. A relationship manager will guide you through the options.'
+  - short_code: transfer-failed
+    content: "I'm sorry your transfer did not go through. Please share the transaction reference and the approximate time of the transaction, and I'll look into it for you right away."
+
+# The WhatsApp handoff greeting is sent by WA-Bot-Engine, so there is deliberately no welcome rule here: with one, the
+# customer would be greeted twice.
+automation_rules:
+  - name: 'Flag Fraud Keywords'
+    description: 'Label conversations where the customer mentions fraud or a scam'
+    event_name: message_created
+    active: true
+    conditions:
+      - { attribute_key: content, filter_operator: contains, values: [fraud],        query_operator: OR }
+      - { attribute_key: content, filter_operator: contains, values: [scam],         query_operator: OR }
+      - { attribute_key: content, filter_operator: contains, values: [unauthorized], query_operator: OR }
+      - { attribute_key: content, filter_operator: contains, values: [unauthorised], query_operator: null }
+    actions:
+      - { action_name: add_label,       action_params: [fraud] }
+      - { action_name: add_label,       action_params: [urgent] }
+      - { action_name: change_priority, action_params: [urgent] }
+  - name: 'Flag Customer Complaints'
+    description: 'Label conversations that mention a complaint'
+    event_name: message_created
+    active: true
+    conditions:
+      - { attribute_key: content, filter_operator: contains, values: [complaint],    query_operator: OR }
+      - { attribute_key: content, filter_operator: contains, values: [complain],     query_operator: OR }
+      - { attribute_key: content, filter_operator: contains, values: [unhappy],      query_operator: OR }
+      - { attribute_key: content, filter_operator: contains, values: [disappointed], query_operator: null }
+    actions:
+      - { action_name: add_label,       action_params: [complaint] }
+      - { action_name: change_priority, action_params: [high] }
+  - name: 'Label Loan Enquiries'
+    description: 'Label conversations that mention a loan'
+    event_name: message_created
+    active: true
+    conditions:
+      - { attribute_key: content, filter_operator: contains, values: [loan],     query_operator: OR }
+      - { attribute_key: content, filter_operator: contains, values: [borrow],   query_operator: OR }
+      - { attribute_key: content, filter_operator: contains, values: [mortgage], query_operator: null }
+    actions:
+      - { action_name: add_label, action_params: [loan] }
+  # Off by default: it labels every resolved conversation, which is triage noise at scale (DEPLOYMENT.md).
+  - name: 'Mark Pending on Resolution'
+    description: 'Label resolved conversations pending-customer (off by default)'
+    event_name: conversation_resolved
+    active: false
+    conditions:
+      - { attribute_key: status, filter_operator: equal_to, values: [resolved], query_operator: null }
+    actions:
+      - { action_name: add_label, action_params: [pending-customer] }
+
+macros:
+  - name: 'Resolve and Thank Customer'
+    actions:
+      - { action_name: send_message,  action_params: ["Thank you for contacting CBZ Bank. Your query has been resolved, and we hope to continue serving you. Have a wonderful day!"] }
+      - { action_name: change_status, action_params: [resolved] }
+  - name: 'Escalate to Senior Team'
+    actions:
+      - { action_name: send_message, action_params: ["I understand your concern and I'm escalating this to our senior support team, who are better placed to help. They will follow up with you shortly. Thank you for your patience."] }
+      - { action_name: add_label,    action_params: [escalated] }
+      - { action_name: add_label,    action_params: [urgent] }
+  - name: 'Confirm Identity'
+    actions:
+      - { action_name: send_message, action_params: ["To help you, please confirm the full name and the mobile number registered on your CBZ account. Never share your PIN, password, OTP or full card or account number in this chat; CBZ will never ask for them."] }
+  - name: 'Fraud Escalation'
+    actions:
+      - { action_name: send_message,    action_params: ["We are treating this as a possible fraud case and escalating it to our fraud team now. If you need help urgently, please call our Contact Centre on +263 867 700 4050 (toll-free 460/1)."] }
+      - { action_name: add_label,       action_params: [fraud] }
+      - { action_name: add_label,       action_params: [urgent] }
+      - { action_name: change_priority, action_params: [urgent] }
+  - name: 'Follow Up Next Business Day'
+    actions:
+      - { action_name: send_message,        action_params: ["We have noted your query and will follow up with you on the next business day. Thank you for your patience."] }
+      - { action_name: snooze_conversation, action_params: [] }
+
+# Every new WhatsApp inbox. WA-Bot-Engine sends the handoff greeting and Chatwoot must open a new conversation per
+# handoff (DEPLOYMENT.md → WA-Bot-Engine integration), so the greeting is off and conversations are not locked.
+# CSAT stays off: its WhatsApp template has to be created once FRONTEND_URL is final.
+whatsapp_inbox:
+  greeting_enabled: false
+  lock_to_single_conversation: false
+  working_hours_enabled: true
+  timezone: Africa/Harare
+  out_of_office_message: 'Thank you for contacting CBZ Bank. Our WhatsApp support team is available Monday to Friday, 8:00 AM to 5:00 PM, and Saturday, 8:00 AM to 1:00 PM (CAT). We have your message and will reply on the next business day.'
+  working_hours:
+    - { day_of_week: 0, closed_all_day: true }
+    - { day_of_week: 1, closed_all_day: false, open_hour: 8, open_minutes: 0, close_hour: 17, close_minutes: 0 }
+    - { day_of_week: 2, closed_all_day: false, open_hour: 8, open_minutes: 0, close_hour: 17, close_minutes: 0 }
+    - { day_of_week: 3, closed_all_day: false, open_hour: 8, open_minutes: 0, close_hour: 17, close_minutes: 0 }
+    - { day_of_week: 4, closed_all_day: false, open_hour: 8, open_minutes: 0, close_hour: 17, close_minutes: 0 }
+    - { day_of_week: 5, closed_all_day: false, open_hour: 8, open_minutes: 0, close_hour: 17, close_minutes: 0 }
+    - { day_of_week: 6, closed_all_day: false, open_hour: 8, open_minutes: 0, close_hour: 13, close_minutes: 0 }

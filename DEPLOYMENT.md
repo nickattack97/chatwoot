@@ -90,10 +90,25 @@ for k in PRIMARY_KEY DETERMINISTIC_KEY KEY_DERIVATION_SALT; do echo "ACTIVE_RECO
 **Never change them on an environment that has data** (nor `SECRET_KEY_BASE`): encrypted columns become unreadable and
 everyone is signed out. Production keeps the values it already has.
 
-### Complete onboarding
+### What a new environment starts with
 
-On a new environment's first release, the migrate step loads the schema and seeds an empty database. Open the
-environment's URL and follow the setup wizard to create the first super admin account.
+On a new environment's first release, the migrate step loads the schema into the empty database and seeds it
+(`db/seeds.rb`, `Helpengine::Defaults`, content in `config/helpengine_defaults.yml`):
+
+- **UserConnect sign-in is on** (SSO and the username/password form), pointed at `UC_BASE_URL` and `UC_SYSTEM_ID` from
+  `deploy/env/helpengine.env` (required: `scripts/check-env.sh` refuses to deploy without them). Afterwards these live in
+  Super Admin → Settings; the env file is not read again. Existing databases are never changed by this.
+- **Complete the onboarding wizard straight after the first release.** Open the environment's URL: the wizard creates
+  the account and the super admin (a local login, used for Super Admin). UserConnect users join that account the first
+  time they sign in, so they cannot sign in before it exists.
+- **The account starts with** the CBZ labels, custom attributes, canned responses, automation rules (the resolution
+  rule off) and macros. Each WhatsApp inbox created afterwards starts with the integration settings: Chatwoot greeting
+  off (WA-Bot-Engine sends the handoff greeting), conversations not locked, Harare working hours with an out-of-office
+  reply. CSAT stays off until `FRONTEND_URL` is final (see the integration table).
+- These are created only when missing and never overwrite an edit. To bring an install made before this up to date:
+  `docker compose -f docker-compose.production.yaml run --rm rails bundle exec rails runner db/seeds/cbz_configs.rb`.
+  It also applies the integration settings to existing WhatsApp inboxes, so it turns the Chatwoot greeting **off** where
+  an earlier version of that script had turned it on.
 
 ---
 

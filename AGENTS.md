@@ -138,6 +138,11 @@ Things this fork does that upstream doesn't — check before assuming upstream b
   `Whatsapp::Dialog360HealthService`, URLs and headers in `Whatsapp::Dialog360CloudApi`); the Graph code paths are
   untouched. Such inboxes never register or remove Meta's webhook and can't do calling. Any new Graph call for
   WhatsApp Cloud needs its 360dialog counterpart there. Setup: `DEPLOYMENT.md` → "Numbers hosted at 360dialog".
+- **New installs start configured** (`Helpengine::Defaults`, content in `config/helpengine_defaults.yml`): UserConnect
+  sign-in on at database creation from `UC_BASE_URL`/`UC_SYSTEM_ID` in the env; every new account gets the CBZ labels,
+  attributes, canned responses, rules and macros; every new WhatsApp inbox gets the integration settings (greeting off).
+  Create-only, never overwriting an edit; hooks are off in the test env unless `HELPENGINE_DEFAULTS=true`. Customer-facing
+  text there is policy-checked by its spec (no account-number requests, no placeholders).
 - **UC/Entra SAML SSO** with no native login fallback; `uc_sign_in` Rack::Attack throttles.
 - **Deployment** is the GitLab pipeline (`.gitlab-ci.yml`, logic in `scripts/ci/`): tag `helpengine-vX.Y.Z-rc.N` on
   `dev` releases to UAT, `helpengine-vX.Y.Z` on `master` to production (versioned image in the project registry, manual

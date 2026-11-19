@@ -70,6 +70,7 @@ spec/services/conversations/message_window_service_spec.rb
 spec/services/csat_survey_service_spec.rb
 spec/services/data_imports/freshdesk/source_bucket_spec.rb
 spec/services/data_imports/intercom/importer_spec.rb
+spec/services/helpengine/defaults_spec.rb
 spec/services/messages/markdown_renderer_service_spec.rb
 spec/services/twilio/health_service_spec.rb
 spec/services/twilio/incoming_message_service_spec.rb
