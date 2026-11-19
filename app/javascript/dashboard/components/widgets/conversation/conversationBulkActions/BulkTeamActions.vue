@@ -1,9 +1,8 @@
 <script setup>
-import { useTemplateRef, computed, ref, onMounted } from 'vue';
+import { useTemplateRef, computed, ref } from 'vue';
 import { useI18n, I18nT } from 'vue-i18n';
 import { useToggle } from '@vueuse/core';
 import { vOnClickOutside } from '@vueuse/components';
-import { useStore } from 'vuex';
 import { useMapGetter } from 'dashboard/composables/store';
 
 import Button from 'dashboard/components-next/button/Button.vue';
@@ -19,7 +18,6 @@ const props = defineProps({
 const emit = defineEmits(['select']);
 
 const { t } = useI18n();
-const store = useStore();
 const containerRef = useTemplateRef('containerRef');
 const [showDropdown, toggleDropdown] = useToggle(false);
 const selectedTeam = ref(null);
@@ -77,10 +75,6 @@ const handleDismiss = () => {
   selectedTeam.value = null;
   toggleDropdown(false);
 };
-
-onMounted(() => {
-  store.dispatch('teams/get');
-});
 </script>
 
 <template>
@@ -108,7 +102,7 @@ onMounted(() => {
         :menu-items="teamMenuItems"
         show-search
         :search-placeholder="t('BULK_ACTION.SEARCH_INPUT_PLACEHOLDER')"
-        class="ltr:-right-2 rtl:-left-2 bottom-8 w-60 max-h-80"
+        class="end-2 bottom-8 w-60 max-h-80"
         @action="handleSelectTeam"
       >
         <template v-if="selectedTeam" #footer>

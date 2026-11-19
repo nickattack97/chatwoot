@@ -19,9 +19,22 @@ describe ActionService do
     let(:action_service) { described_class.new(conversation) }
 
     it 'opens the conversation' do
+      conversation.update!(ai_assignee: create(:agent_bot, account: conversation.account))
       expect(conversation.status).to eq('resolved')
       action_service.open_conversation(nil)
-      expect(conversation.reload.status).to eq('open')
+      expect(conversation.reload).to have_attributes(status: 'open', ai_assignee_type: nil, assignee_agent_bot_id: nil)
+    end
+  end
+
+  describe '#change_status' do
+    let(:conversation) { create(:conversation, status: :pending) }
+
+    it 'clears AgentBot ownership when changing the status to open' do
+      conversation.update!(ai_assignee: create(:agent_bot, account: conversation.account))
+
+      described_class.new(conversation).change_status(['open'])
+
+      expect(conversation.reload).to have_attributes(status: 'open', ai_assignee_type: nil, assignee_agent_bot_id: nil)
     end
   end
 
@@ -97,6 +110,21 @@ describe ActionService do
         expect(conversation.reload.assignee).to eq(original_assignee)
       end
     end
+
+    context 'when the assignee was concurrently changed to the target agent by another writer' do
+      it 'does not issue a redundant write' do
+        inbox_member
+        action_service # instantiate now, so @conversation stays stale relative to the write below
+        Conversation.find(conversation.id).update!(assignee_id: agent.id)
+        # Read via a fresh query, not `conversation.reload`, which would mutate the same
+        # object @conversation points to and silently erase the staleness under test.
+        updated_at_before = Conversation.find(conversation.id).updated_at
+
+        action_service.assign_agent([agent.id])
+
+        expect(Conversation.find(conversation.id).updated_at).to eq(updated_at_before)
+      end
+    end
   end
 
   describe '#assign_team' do
@@ -136,6 +164,18 @@ describe ActionService do
         expect do
           action_service.assign_team([invalid_team_id])
         end.not_to change { conversation.reload.team }.from(original_team)
+      end
+
+      it 'does not issue a redundant write when the team was concurrently changed to the target team' do
+        action_service # instantiate now, so @conversation stays stale relative to the write below
+        Conversation.find(conversation.id).update!(team_id: team.id)
+        # Read via a fresh query, not `conversation.reload`, which would mutate the same
+        # object @conversation points to and silently erase the staleness under test.
+        updated_at_before = Conversation.find(conversation.id).updated_at
+
+        action_service.assign_team([team.id])
+
+        expect(Conversation.find(conversation.id).updated_at).to eq(updated_at_before)
       end
     end
   end

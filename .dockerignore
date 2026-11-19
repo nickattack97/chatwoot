@@ -15,3 +15,6 @@ vendor/bundle
 .DS_Store
 *.swp
 *~
+# pnpm is the package manager; a stray npm/yarn lockfile makes vite_ruby (>= 3.10) run `npm ci` and fail assets:precompile
+package-lock.json
+yarn.lock

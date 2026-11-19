@@ -29,9 +29,11 @@ const HEADERS = {
  *
  * @param {File} file - The file to be uploaded. It should be a File object (typically coming from a file input element).
  * @param {string} accountId - The account ID.
+ * @param {Function} [onProgress] - Called with the upload progress as a fraction between 0 and 1.
+ * @param {AbortSignal} [signal] - Aborts the request when the upload is cancelled.
  * @returns {Promise} A promise that resolves with the server's response when the upload is successful, or rejects if there's an error.
  */
-export async function uploadFile(file, accountId) {
+export async function uploadFile(file, accountId, onProgress, signal) {
   if (!accountId) {
     accountId = accountIdFromRoute();
   }
@@ -43,7 +45,15 @@ export async function uploadFile(file, accountId) {
   const { data } = await axios.post(
     `/api/${API_VERSION}/accounts/${accountId}/upload`,
     formData,
-    { headers: HEADERS }
+    {
+      headers: HEADERS,
+      signal,
+      onUploadProgress: event => {
+        if (onProgress && event.total) {
+          onProgress(Math.min(1, event.loaded / event.total));
+        }
+      },
+    }
   );
 
   return {
@@ -58,9 +68,10 @@ export async function uploadFile(file, accountId) {
  *
  * @param {string} url - The external URL of the image.
  * @param {string} accountId - The account ID.
+ * @param {AbortSignal} [signal] - Aborts the request when the upload is cancelled.
  * @returns {Promise} A promise that resolves with the server's response.
  */
-export async function uploadExternalImage(url, accountId) {
+export async function uploadExternalImage(url, accountId, signal) {
   if (!accountId) {
     accountId = accountIdFromRoute();
   }
@@ -68,7 +79,7 @@ export async function uploadExternalImage(url, accountId) {
   const { data } = await axios.post(
     `/api/${API_VERSION}/accounts/${accountId}/upload`,
     { external_url: url },
-    { headers: { 'Content-Type': 'application/json' } }
+    { headers: { 'Content-Type': 'application/json' }, signal }
   );
 
   return {

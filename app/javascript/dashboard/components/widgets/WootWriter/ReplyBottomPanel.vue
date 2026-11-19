@@ -7,15 +7,20 @@ import * as ActiveStorage from 'activestorage';
 import inboxMixin from 'shared/mixins/inboxMixin';
 import { FEATURE_FLAGS } from 'dashboard/featureFlags';
 import { getAllowedFileTypesByChannel } from '@chatwoot/utils';
-import { ALLOWED_FILE_TYPES } from 'shared/constants/messages';
 import VideoCallButton from '../VideoCallButton.vue';
+import RequestContactInfoButton from '../RequestContactInfoButton.vue';
 import { INBOX_TYPES } from 'dashboard/helper/inbox';
 import { mapGetters } from 'vuex';
 import NextButton from 'dashboard/components-next/button/Button.vue';
 
 export default {
   name: 'ReplyBottomPanel',
-  components: { NextButton, FileUpload, VideoCallButton },
+  components: {
+    NextButton,
+    FileUpload,
+    VideoCallButton,
+    RequestContactInfoButton,
+  },
   mixins: [inboxMixin],
   props: {
     isNote: {
@@ -114,14 +119,6 @@ export default {
       type: String,
       default: '',
     },
-    showQuotedReplyToggle: {
-      type: Boolean,
-      default: false,
-    },
-    quotedReplyEnabled: {
-      type: Boolean,
-      default: false,
-    },
     isEditorDisabled: {
       type: Boolean,
       default: false,
@@ -131,7 +128,7 @@ export default {
     'toggleInsertArticle',
     'selectWhatsappTemplate',
     'selectContentTemplate',
-    'toggleQuotedReply',
+    'requestContactInfoTemplate',
   ],
   setup(props) {
     const { setSignatureFlagForInbox, fetchSignatureFlagFromUISettings } =
@@ -164,11 +161,6 @@ export default {
       setSignatureFlagForInbox,
       fetchSignatureFlagFromUISettings,
       uploadRef,
-    };
-  },
-  data() {
-    return {
-      ALLOWED_FILE_TYPES,
     };
   },
   computed: {
@@ -212,13 +204,11 @@ export default {
       return this.conversationType === 'instagram_direct_message';
     },
     allowedFileTypes() {
-      // Use default file types for private notes
       if (this.isOnPrivateNote) {
-        return this.ALLOWED_FILE_TYPES;
+        return getAllowedFileTypesByChannel();
       }
 
       let channelType = this.channelType || this.inbox?.channel_type;
-
       if (this.isAnInstagramChannel || this.isInstagramDM) {
         channelType = INBOX_TYPES.INSTAGRAM;
       }
@@ -262,11 +252,6 @@ export default {
     },
     isFetchingAppIntegrations() {
       return this.uiFlags.isFetching;
-    },
-    quotedReplyToggleTooltip() {
-      return this.quotedReplyEnabled
-        ? this.$t('CONVERSATION.REPLYBOX.QUOTED_REPLY.DISABLE_TOOLTIP')
-        : this.$t('CONVERSATION.REPLYBOX.QUOTED_REPLY.ENABLE_TOOLTIP');
     },
   },
   mounted() {
@@ -348,16 +333,6 @@ export default {
         @click="toggleMessageSignature"
       />
       <NextButton
-        v-if="showQuotedReplyToggle"
-        v-tooltip.top-end="quotedReplyToggleTooltip"
-        icon="i-ph-quotes"
-        :variant="quotedReplyEnabled ? 'solid' : 'faded'"
-        color="slate"
-        sm
-        :aria-pressed="quotedReplyEnabled"
-        @click="$emit('toggleQuotedReply')"
-      />
-      <NextButton
         v-if="enableWhatsAppTemplates"
         v-tooltip.top-end="$t('CONVERSATION.FOOTER.WHATSAPP_TEMPLATES')"
         icon="i-ph-whatsapp-logo"
@@ -365,6 +340,10 @@ export default {
         faded
         sm
         @click="$emit('selectWhatsappTemplate')"
+      />
+      <RequestContactInfoButton
+        v-if="!isOnPrivateNote"
+        @request-template="$emit('requestContactInfoTemplate')"
       />
       <NextButton
         v-if="enableContentTemplates"
@@ -427,7 +406,7 @@ export default {
   @apply flex;
 }
 
-::v-deep .file-uploads {
+:deep(.file-uploads) {
   label {
     @apply cursor-pointer;
   }

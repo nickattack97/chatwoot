@@ -2,12 +2,21 @@
 import { DEFAULT_REDIRECT_URL } from 'dashboard/constants/globals';
 import { absoluteURL } from 'dashboard/helper/URLHelper';
 import { verifyPasswordToken } from '../../../api/auth';
+import {
+  getLoginRedirectURL,
+  getMfaSignInURL,
+} from '../../../helpers/AuthHelper';
 import Spinner from 'shared/components/Spinner.vue';
 
 export default {
   components: { Spinner },
   props: {
+    ssoAccountId: { type: String, default: '' },
     confirmationToken: {
+      type: String,
+      default: '',
+    },
+    redirectUrl: {
       type: String,
       default: '',
     },
@@ -18,10 +27,21 @@ export default {
   methods: {
     async confirmToken() {
       try {
-        await verifyPasswordToken({
+        const user = await verifyPasswordToken({
           confirmationToken: this.confirmationToken,
         });
-        window.location = absoluteURL(DEFAULT_REDIRECT_URL);
+        window.location =
+          (user?.redirectUrl &&
+            getMfaSignInURL({
+              loginUrl: user.redirectUrl,
+              redirectUrl: this.redirectUrl,
+              ssoAccountId: this.ssoAccountId,
+            })) ||
+          getLoginRedirectURL({
+            user,
+            ssoAccountId: this.ssoAccountId,
+            redirectUrl: this.redirectUrl,
+          });
       } catch (error) {
         window.location = absoluteURL(DEFAULT_REDIRECT_URL);
       }

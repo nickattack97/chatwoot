@@ -29,24 +29,25 @@ class SafeFetch::Fetcher
   end
 
   def stream_response(tempfile)
-    response = nil
     bytes_written = 0
 
-    handler = lambda do |res|
-      response = res
+    perform_request do |res|
       next unless res.is_a?(Net::HTTPSuccess)
 
       validate_content_type!(res['content-type'])
       bytes_written = write_response_body(res, tempfile, bytes_written)
     end
+  rescue Net::OpenTimeout, Net::ReadTimeout, SocketError, OpenSSL::SSL::SSLError,
+         IOError, Errno::ECONNABORTED, Errno::ECONNREFUSED, Errno::ECONNRESET,
+         Errno::EHOSTUNREACH, Errno::ENETUNREACH, Errno::EPIPE, Errno::ETIMEDOUT => e
+    raise SafeFetch::FetchError, e.message
+  end
 
-    if SafeFetch::AllowedInternalHosts.allow?(options.uri)
-      request_allowed_internal_host(&handler)
-    else
-      SsrfFilter.public_send(options.method, options.url, **options.request_options, &handler)
-    end
+  def perform_request(&)
+    return request_allowed_internal_host(&) if SafeFetch::AllowedInternalHosts.allow?(options.uri)
+    return SafeFetch::PrivateNetworkRequest.new(options).perform(&) if SafeFetch.allow_private_network?
 
-    response
+    SsrfFilter.public_send(options.method, options.url, **options.request_options, &)
   end
 
   # Bypasses ssrf_filter for hosts an operator has explicitly allow-listed. See

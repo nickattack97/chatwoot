@@ -34,6 +34,10 @@ class InboxPolicy < ApplicationPolicy
     true
   end
 
+  def message_templates?
+    true
+  end
+
   def campaigns?
     administrator? || can?('campaign_manage')
   end
@@ -62,12 +66,36 @@ class InboxPolicy < ApplicationPolicy
     administrator? || can?('inbox_manage')
   end
 
+  def whatsapp_business_management_token?
+    @account_user.administrator?
+  end
+
   def health?
     administrator? || can?('inbox_manage')
   end
 
   def reset_secret?
     administrator? || can?('inbox_manage')
+  end
+
+  def rotate_hmac_token?
+    @account_user.administrator?
+  end
+
+  def enable_whatsapp_calling?
+    @account_user.administrator?
+  end
+
+  def disable_whatsapp_calling?
+    @account_user.administrator?
+  end
+
+  def set_inbound_calls?
+    @account_user.administrator?
+  end
+
+  def set_call_recording?
+    @account_user.administrator?
   end
 
   private
@@ -80,4 +108,3 @@ class InboxPolicy < ApplicationPolicy
     @account_user.can?(permission)
   end
 end
-

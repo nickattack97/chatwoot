@@ -34,7 +34,7 @@ const handleImgClick = () => {
 <template>
   <div
     data-testid="changelog-card"
-    class="flex flex-col justify-between p-3 w-full rounded-lg border shadow-sm transition-all duration-200 border-n-weak bg-n-card text-n-slate-12"
+    class="flex flex-col justify-between p-3 w-full rounded-lg border shadow-sm transition-all duration-200 border-n-weak bg-n-card dark:bg-n-solid-1 text-n-slate-12"
     :class="{
       'animate-fade-out pointer-events-none': isDismissing,
       'hover:shadow': isActive,
@@ -62,7 +62,7 @@ const handleImgClick = () => {
       <img
         :src="card.feature_image"
         :alt="`${card.title} preview image`"
-        class="object-cover w-full h-24 rounded-md cursor-pointer"
+        class="block w-full h-auto rounded-md cursor-pointer"
         loading="lazy"
         @click.stop="handleImgClick"
       />
@@ -74,7 +74,7 @@ const handleImgClick = () => {
       <img
         :src="card.feature_image"
         :alt="`${card.title} preview image`"
-        class="object-cover w-full h-24 rounded-md cursor-pointer"
+        class="block w-full h-auto rounded-md cursor-pointer"
         loading="lazy"
         @click.stop="handleImgClick"
       />

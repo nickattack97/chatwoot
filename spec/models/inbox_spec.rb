@@ -41,6 +41,34 @@ RSpec.describe Inbox do
     it_behaves_like 'avatarable'
   end
 
+  describe 'account teardown' do
+    it 'destroys an orphaned inbox after its account has been deleted' do
+      account = create(:account)
+      inbox = create(:inbox, account: account)
+      account.delete
+
+      orphaned_inbox = described_class.find(inbox.id)
+
+      expect { orphaned_inbox.destroy! }.not_to raise_error
+    end
+  end
+
+  describe 'filtered unread count invalidation' do
+    let(:account) { create(:account) }
+    let(:inbox) { create(:inbox, account: account) }
+    let(:store) { Conversations::UnreadCounts::FilteredCountStore }
+
+    before do
+      account.enable_features!(:unread_count_for_filters)
+    end
+
+    it 'invalidates saved folder snapshots when destroyed' do
+      expect do
+        inbox.destroy!
+      end.to change { store.conversation_version(account.id) }.by(1)
+    end
+  end
+
   describe '#add_members' do
     let(:inbox) { FactoryBot.create(:inbox) }
 
@@ -85,6 +113,41 @@ RSpec.describe Inbox do
                                                                           account: inbox.account,
                                                                           cache_keys: inbox.account.cache_keys
                                                                         )
+    end
+  end
+
+  describe 'agent availability' do
+    let(:account) { create(:account) }
+    let(:inbox) { create(:inbox, account: account) }
+    let(:agent) { create(:user, account: account, role: :agent) }
+    let(:teammate) { create(:user, account: account, role: :agent) }
+
+    before do
+      create(:inbox_member, inbox: inbox, user: agent)
+      create(:inbox_member, inbox: inbox, user: teammate)
+      allow(OnlineStatusTracker).to receive(:get_available_users)
+        .and_return(agent.id.to_s => 'online', teammate.id.to_s => 'online')
+    end
+
+    it 'leaves agents who do not take conversations out of the available agents' do
+      agent.account_users.find_by(account: account).update!(accepts_conversations: false)
+
+      expect(inbox.available_agents.map(&:user)).to contain_exactly(teammate)
+      expect(inbox.available_call_agents.map(&:user)).to contain_exactly(agent, teammate)
+    end
+
+    it 'leaves agents who do not take calls out of the available call agents' do
+      agent.account_users.find_by(account: account).update!(accepts_calls: false)
+
+      expect(inbox.available_call_agents.map(&:user)).to contain_exactly(teammate)
+      expect(inbox.available_agents.map(&:user)).to contain_exactly(agent, teammate)
+    end
+
+    it 'leaves agents who are not online out of both' do
+      allow(OnlineStatusTracker).to receive(:get_available_users).and_return(teammate.id.to_s => 'online', agent.id.to_s => 'busy')
+
+      expect(inbox.available_agents.map(&:user)).to contain_exactly(teammate)
+      expect(inbox.available_call_agents.map(&:user)).to contain_exactly(teammate)
     end
   end
 
