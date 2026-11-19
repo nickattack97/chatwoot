@@ -1,7 +1,7 @@
 module Enterprise::Concerns::Account
   extend ActiveSupport::Concern
 
-  SUPERVISOR_ROLE_NAME = 'Supervisor'
+  SUPERVISOR_ROLE_NAME = 'Supervisor'.freeze
   SUPERVISOR_ROLE_PERMISSIONS = %w[
     report_manage
     label_manage
@@ -9,6 +9,7 @@ module Enterprise::Concerns::Account
     inbox_manage
     conversation_manage
     contact_manage
+    campaign_manage
   ].freeze
 
   included do

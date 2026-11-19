@@ -16,5 +16,11 @@ RSpec.describe CampaignPolicy, type: :policy do
     context 'when agent has campaign_manage permission' do
       it { expect(campaign_policy).to permit(context, campaign) }
     end
+
+    context 'when agent has a custom role without campaign_manage' do
+      let(:custom_role) { create(:custom_role, account: account, permissions: ['conversation_manage']) }
+
+      it { expect(campaign_policy).not_to permit(context, campaign) }
+    end
   end
 end
