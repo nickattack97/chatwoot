@@ -1,0 +1,243 @@
+# CBZ HelpEngine (Chatwoot fork): checks, releases to UAT and production, and rollbacks. The job logic is in scripts/ci/,
+# which runs the same on a developer machine. How to release, roll back and set up a host: DEPLOYMENT.md → "Pipeline".
+#
+#   Merge request / push to dev   checks only (RuboCop, the CBZ and WhatsApp specs, dependency audit, image build)
+#   tag helpengine-vX.Y.Z-rc.N    on a dev commit    → build, publish, migrate (manual), deploy and verify on UAT
+#   tag helpengine-vX.Y.Z         on a master commit → build, publish, migrate (manual), deploy and verify on production
+#   Run pipeline + ROLLBACK_VERSION and ROLLBACK_ENV  → put that environment back on a published version
+#
+# The tags carry a prefix because the repository also holds upstream Chatwoot's own v* tags.
+
+stages:
+  - test
+  - build
+  - migrate
+  - deploy
+  - verify
+
+variables:
+  GIT_STRATEGY: clone
+  GIT_DEPTH: "50"
+  HELPENGINE_IMAGE_PREFIX: "$CI_REGISTRY_IMAGE"
+  # The runners and folders of each host. Set these as CI/CD variables (Settings → CI/CD → Variables) when they differ.
+  # BUILD_RUNNER_TAG builds images and runs the checks: an amd64 host with Docker (the image compiles grpc for musl).
+  BUILD_RUNNER_TAG: "helpengine_uat"
+  UAT_RUNNER_TAG: "helpengine_uat"
+  PROD_RUNNER_TAG: "helpengine_prod"
+  UAT_DEPLOY_DIR: "/opt/docker/cbz-helpengine"
+  PROD_DEPLOY_DIR: "/opt/docker/cbz-helpengine"
+  UAT_URL: "https://pg.cbz.co.zw/helpengine-uat"
+  PROD_URL: "https://pg.cbz.co.zw/helpengine"
+
+# One pipeline per push: a branch with an open merge request runs the merge request pipeline only. Tags still run.
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+
+# ───────────────────────────────── Checks ─────────────────────────────────
+# They run in throwaway containers, touch no deploy folder and never deploy.
+.ci_check:
+  stage: test
+  tags: ["$BUILD_RUNNER_TAG"]
+  interruptible: true
+  timeout: 45m
+  rules:
+    - if: '$ROLLBACK_VERSION'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_COMMIT_TAG =~ /^helpengine-v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$/'
+  after_script:
+    - scripts/ci/cleanup.sh
+
+test_ruby:
+  extends: .ci_check
+  script:
+    - scripts/ci/test-ruby.sh
+
+# Advisories appear without any code change: a warning for UAT, blocking for a production release.
+audit_dependencies:
+  extends: .ci_check
+  timeout: 20m
+  rules:
+    - if: '$ROLLBACK_VERSION'
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^helpengine-v[0-9]+\.[0-9]+\.[0-9]+$/'
+      allow_failure: false
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      allow_failure: true
+    - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "master"'
+      allow_failure: true
+    - if: '$CI_COMMIT_TAG =~ /^helpengine-v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$/'
+      allow_failure: true
+  script:
+    - scripts/ci/audit.sh
+
+# Builds the image and throws it away. Release tags skip it: their build job builds for real.
+build_check:
+  extends: .ci_check
+  timeout: 75m
+  rules:
+    - if: '$ROLLBACK_VERSION'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+  script:
+    - scripts/ci/build-check.sh
+
+# ───────────────────────────────── Releases ─────────────────────────────────
+# Every release job logs who started it and appends one line to $DEPLOY_DIR/deploy-audit.log (for a manual job, who pressed
+# play). The registry login uses the job token: no stored secret. The version is the tag without its prefix.
+.release_job:
+  before_script:
+    - export HELPENGINE_VERSION="${CI_COMMIT_TAG#helpengine-v}"
+    - echo "HelpEngine $HELPENGINE_VERSION, image $HELPENGINE_IMAGE_PREFIX/helpengine:$HELPENGINE_VERSION"
+    - echo "Job started by ${GITLAB_USER_LOGIN:-unknown}"
+    - scripts/ci/registry.sh login
+  after_script:
+    - scripts/ci/audit-trail.sh
+    - scripts/ci/registry.sh logout
+
+.uat_release:
+  extends: .release_job
+  resource_group: helpengine-uat
+  variables:
+    DEPLOY_DIR: "$UAT_DEPLOY_DIR"
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^helpengine-v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$/'
+
+.prod_release:
+  extends: .release_job
+  resource_group: helpengine-production
+  variables:
+    DEPLOY_DIR: "$PROD_DEPLOY_DIR"
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^helpengine-v[0-9]+\.[0-9]+\.[0-9]+$/'
+
+# ── UAT: tag helpengine-vX.Y.Z-rc.N on a dev commit ──
+build_uat:
+  extends: .uat_release
+  stage: build
+  tags: ["$BUILD_RUNNER_TAG"]
+  timeout: 75m
+  script:
+    - HELPENGINE_VERSION="$(scripts/ci/release-guard.sh uat)"
+    - export HELPENGINE_VERSION
+    - scripts/ci/registry.sh check
+    - scripts/ci/build-release.sh
+    - scripts/ci/registry.sh push
+
+migrate_uat:
+  extends: .uat_release
+  stage: migrate
+  tags: ["$UAT_RUNNER_TAG"]
+  when: manual
+  allow_failure: false
+  environment: { name: uat, url: "$UAT_URL", action: prepare }
+  script:
+    - scripts/ci/stack.sh sync
+    - scripts/ci/stack.sh prepare
+    - scripts/ci/stack.sh migrate
+
+deploy_uat:
+  extends: .uat_release
+  stage: deploy
+  tags: ["$UAT_RUNNER_TAG"]
+  environment: { name: uat, url: "$UAT_URL" }
+  script:
+    - scripts/ci/stack.sh up
+    # Housekeeping never fails a deploy that worked.
+    - 'scripts/ci/prune-images.sh || echo "Image clean-up skipped"'
+
+verify_uat:
+  extends: .uat_release
+  stage: verify
+  tags: ["$UAT_RUNNER_TAG"]
+  timeout: 10m
+  script:
+    - scripts/ci/verify-deploy.sh
+
+# ── Production: tag helpengine-vX.Y.Z on a master commit ──
+# The image is built on the build runner and pulled by production: what runs is the published copy.
+# Protect the production environment (Settings → CI/CD → Protected environments) with named approvers.
+build_production:
+  extends: .prod_release
+  stage: build
+  tags: ["$BUILD_RUNNER_TAG"]
+  timeout: 75m
+  script:
+    - HELPENGINE_VERSION="$(scripts/ci/release-guard.sh production)"
+    - export HELPENGINE_VERSION
+    - scripts/ci/registry.sh check
+    - scripts/ci/build-release.sh
+    - scripts/ci/registry.sh push
+
+migrate_production:
+  extends: .prod_release
+  stage: migrate
+  tags: ["$PROD_RUNNER_TAG"]
+  when: manual
+  allow_failure: false
+  environment: { name: production, url: "$PROD_URL", action: prepare }
+  script:
+    - scripts/ci/stack.sh sync
+    - scripts/ci/stack.sh prepare
+    - scripts/ci/stack.sh migrate
+
+deploy_production:
+  extends: .prod_release
+  stage: deploy
+  tags: ["$PROD_RUNNER_TAG"]
+  environment: { name: production, url: "$PROD_URL" }
+  script:
+    - scripts/ci/stack.sh up
+    - 'scripts/ci/prune-images.sh || echo "Image clean-up skipped"'
+
+verify_production:
+  extends: .prod_release
+  stage: verify
+  tags: ["$PROD_RUNNER_TAG"]
+  timeout: 10m
+  script:
+    - scripts/ci/verify-deploy.sh
+
+# ───────────────────────────────── Rollback ─────────────────────────────────
+# CI/CD → Pipelines → Run pipeline, branch dev, variables ROLLBACK_VERSION=1.2.0 (or 1.2.0-rc.3 on UAT) and
+# ROLLBACK_ENV=uat|production. Nothing is built or pushed and no migration is run or undone: it refuses when the two
+# releases differ in migrations (ALLOW_SCHEMA_CHANGE=true overrides, only if the schema already matches).
+# Run it on dev, not on the tag of the version you want: an older tag's pipeline has no rollback job.
+.rollback:
+  stage: deploy
+  timeout: 15m
+  before_script:
+    - echo "Rollback of $ROLLBACK_ENV to $ROLLBACK_VERSION, started by ${GITLAB_USER_LOGIN:-unknown}"
+    - scripts/ci/registry.sh login
+  after_script:
+    - scripts/ci/audit-trail.sh
+    - scripts/ci/registry.sh logout
+  script:
+    - scripts/ci/rollback.sh
+
+rollback_uat:
+  extends: .rollback
+  tags: ["$UAT_RUNNER_TAG"]
+  resource_group: helpengine-uat
+  variables:
+    DEPLOY_DIR: "$UAT_DEPLOY_DIR"
+  environment: { name: uat, url: "$UAT_URL" }
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" && $ROLLBACK_VERSION && $ROLLBACK_ENV == "uat"'
+
+rollback_production:
+  extends: .rollback
+  tags: ["$PROD_RUNNER_TAG"]
+  resource_group: helpengine-production
+  variables:
+    DEPLOY_DIR: "$PROD_DEPLOY_DIR"
+  environment: { name: production, url: "$PROD_URL" }
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" && $ROLLBACK_VERSION && $ROLLBACK_ENV == "production"'

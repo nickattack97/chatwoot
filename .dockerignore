@@ -18,3 +18,8 @@ vendor/bundle
 # pnpm is the package manager; a stray npm/yarn lockfile makes vite_ruby (>= 3.10) run `npm ci` and fail assets:precompile
 package-lock.json
 yarn.lock
+
+# CBZ: the pipeline passes REVISION, so the 300 MB history stays out of the build context; env files never go in an image.
+.git
+deploy/env/*.env
+*.env

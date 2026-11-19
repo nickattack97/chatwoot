@@ -89,13 +89,15 @@ RUN if [ "$RAILS_ENV" = "production" ]; then \
   fi
 
 # Generate .git_sha file with current commit hash
-RUN git rev-parse HEAD > /app/.git_sha
+# CBZ: the pipeline passes REVISION and leaves .git out of the build context (.dockerignore).
+ARG REVISION=""
+RUN if [ -n "$REVISION" ]; then echo "$REVISION" > /app/.git_sha; else git rev-parse HEAD > /app/.git_sha 2>/dev/null || echo unknown > /app/.git_sha; fi
 
 # Remove unnecessary files
 RUN rm -rf /gems/ruby/3.4.0/cache/*.gem \
   && find /gems/ruby/3.4.0/gems/ \( -name "*.c" -o -name "*.o" \) -delete \
   && rm -rf .git \
-  && rm .gitignore
+  && rm -f .gitignore
 
 # final build stage
 FROM ruby:3.4.4-alpine3.21
@@ -155,3 +157,26 @@ COPY --from=pre-builder /app/.git_sha /app/.git_sha
 WORKDIR /app
 
 EXPOSE 3000
+
+# ── CBZ HelpEngine additions. Kept at the end so upstream changes above merge cleanly. ──
+# Version labels come from the pipeline (scripts/ci); CHATWOOT_VERSION is the upstream release this build is based on.
+ARG VERSION=dev
+ARG REVISION=unknown
+ARG CHATWOOT_VERSION=unknown
+LABEL org.opencontainers.image.title="cbz-helpengine" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}" \
+      zw.co.cbz.chatwoot.version="${CHATWOOT_VERSION}"
+
+# Production runs as uid 1000 (docker-compose.production.yaml sets user: 1000:1000). The user is set there rather than
+# with USER here because upstream's development compose builds this same Dockerfile and runs `bundle install` at start.
+# Only the directories the app writes to belong to it; the code and gems stay read-only to it.
+RUN addgroup -S -g 1000 helpengine \
+  && adduser -S -D -H -u 1000 -G helpengine -h /tmp helpengine \
+  && mkdir -p /app/tmp /app/log /app/storage \
+  && chown -R 1000:1000 /app/tmp /app/log /app/storage \
+  && chmod 0755 /app/docker/entrypoints/helpengine.sh
+
+# Rails answers /health without touching the database. Sidekiq and the migrate job override this in compose.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=4 \
+  CMD wget -q -O /dev/null http://127.0.0.1:3000/health || exit 1

@@ -1,60 +1,118 @@
-version: '3'
+# CBZ HelpEngine (Chatwoot fork) for UAT and production. The pipeline (.gitlab-ci.yml) deploys it; by hand it is:
+#
+#   1. Fill in deploy/env/*.env from the *.env.example files (gitignored), and .env from deploy/env/compose.env.example.
+#      scripts/check-env.sh all   lists what is missing, by name only.
+#   2. HELPENGINE_IMAGE_PREFIX and HELPENGINE_VERSION choose the image (the pipeline sets them; there is no `latest`).
+#   3. docker compose -f docker-compose.production.yaml pull
+#   4. docker compose -f docker-compose.production.yaml --profile tools run --rm migrate      (a deliberate step, not part of up)
+#   5. docker compose -f docker-compose.production.yaml up -d --no-build
+#
+# Postgres and Redis run here only with COMPOSE_PROFILES=bundled-db (in .env). Production is meant to use a database server
+# with backups instead (see DEPLOYMENT.md); the profile keeps the current single-host install running meanwhile.
+#
+# The project name and the three volume names are what the existing install uses (cbz-helpengine_postgres_data,
+# cbz-helpengine_redis_data, cbz-helpengine_storage_data). Renaming any of them would start production on empty volumes.
+name: cbz-helpengine
+
+x-app: &app
+  image: ${HELPENGINE_IMAGE_PREFIX:-cbz-helpengine}/helpengine:${HELPENGINE_VERSION:-dev}
+  env_file: deploy/env/helpengine.env
+  environment:
+    RAILS_ENV: production
+    NODE_ENV: production
+    INSTALLATION_ENV: docker
+    HOME: /tmp
+  entrypoint: ["/app/docker/entrypoints/helpengine.sh"]
+  user: "1000:1000"                     # the image owns /app/tmp, /app/log and /app/storage to uid 1000
+  restart: unless-stopped
+  read_only: true                       # the only writable places are the storage volume and the tmpfs mounts
+  tmpfs:
+    - /tmp:mode=1777
+    - /app/tmp:mode=1777
+    - /app/log:mode=1777
+  volumes:
+    - storage_data:/app/storage
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  init: true
+  logging: &logging
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+  depends_on:
+    redis: { condition: service_healthy }
 
 services:
-  base: &base
-    image: cbz-helpengine:latest
-    env_file: .env ## Change this file for customized env variables
-    volumes:
-      - storage_data:/app/storage
-
   rails:
-    <<: *base
-    depends_on:
-      - postgres
-      - redis
+    <<: *app
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        VERSION: ${HELPENGINE_VERSION:-dev}
+        REVISION: ${HELPENGINE_REVISION:-unknown}
+        CHATWOOT_VERSION: ${CHATWOOT_VERSION:-unknown}
+    command: ["bundle", "exec", "rails", "s", "-p", "3000", "-b", "0.0.0.0"]
     ports:
-      - '127.0.0.1:3000:3000'
-    environment:
-      - NODE_ENV=production
-      - RAILS_ENV=production
-      - INSTALLATION_ENV=docker
-    entrypoint: docker/entrypoints/rails.sh
-    command: ['bundle', 'exec', 'rails', 's', '-p', '3000', '-b', '0.0.0.0']
-    restart: always
+      # The host's nginx proxies to this; it is never published beyond the host.
+      - "${HELPENGINE_BIND:-127.0.0.1}:${HELPENGINE_PORT:-3000}:3000"
+    stop_grace_period: 30s
 
   sidekiq:
-    <<: *base
-    depends_on:
-      - postgres
-      - redis
-    environment:
-      - NODE_ENV=production
-      - RAILS_ENV=production
-      - INSTALLATION_ENV=docker
-    command: ['bundle', 'exec', 'sidekiq', '-C', 'config/sidekiq.yml']
-    restart: always
+    <<: *app
+    command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml"]
+    healthcheck:
+      # Sidekiq retitles its process "sidekiq 7.x.y … [n of m busy]". Exec form, no shell: a shell running the check would
+      # have "sidekiq" in its own command line and always match.
+      test: ["CMD", "pgrep", "-f", "^sidekiq [0-9]"]
+      interval: 15s
+      timeout: 5s
+      start_period: 120s
+      retries: 4
+    # Sidekiq finishes or re-queues its running jobs on TERM within its timeout (config/sidekiq.yml).
+    stop_grace_period: 40s
 
-  postgres:
-    image: pgvector/pgvector:pg16
-    restart: always
-    ports:
-      - '127.0.0.1:5432:5432'
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_DB=cbz_helpengine
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+  # One-off: create or migrate the database (db:chatwoot_prepare loads the schema and seeds on an empty database,
+  # otherwise it migrates). The pipeline runs it as its own approved step before the new release starts.
+  migrate:
+    <<: *app
+    profiles: [tools]
+    command: ["bundle", "exec", "rails", "db:chatwoot_prepare"]
+    restart: "no"
+    healthcheck: { disable: true }
 
   redis:
-    image: redis:alpine
-    restart: always
-    command: ["sh", "-c", "redis-server --requirepass \"$REDIS_PASSWORD\""]
-    env_file: .env
+    image: redis:alpine                 # pin by digest once the running version is read off production (DEPLOYMENT.md)
+    env_file: deploy/env/redis.env
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\""]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
     volumes:
       - redis_data:/data
     ports:
-      - '127.0.0.1:6379:6379'
+      # Host access for operators only; HELPENGINE_REDIS_PUBLISH in .env moves it if 6379 is taken on this host.
+      - "${HELPENGINE_REDIS_PUBLISH:-127.0.0.1:6379}:6379"
+    restart: unless-stopped
+    logging: *logging
+
+  postgres:
+    profiles: [bundled-db]
+    image: pgvector/pgvector:pg16       # same major as the existing data; pin by digest as above
+    env_file: deploy/env/postgres.env
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -q -U \"$$POSTGRES_USER\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Host access (pg_dump, psql) only; HELPENGINE_PG_PUBLISH in .env moves it if 5432 is taken on this host.
+      - "${HELPENGINE_PG_PUBLISH:-127.0.0.1:5432}:5432"
+    restart: unless-stopped
+    logging: *logging
 
 volumes:
   storage_data:

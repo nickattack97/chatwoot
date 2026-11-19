@@ -110,3 +110,6 @@ Procfile.worktree
 
 # Cache that `rake ruby_llm:refresh_models` writes next to the model registry
 config/llm_models.json.published.json
+
+# CBZ: real environment files for the containers (deploy/env/*.env.example are the committed templates)
+/deploy/env/*.env

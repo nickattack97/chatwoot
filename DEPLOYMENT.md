@@ -49,12 +49,12 @@ graph TD
 | Production server | Ubuntu 22.04.5 LTS | x86_64 (amd64) | Runs the app |
 | DMZ proxy | Windows Server | x86_64 | Internet-facing nginx reverse proxy |
 
-### Why builds must happen on the production server
+### Why images are built on an amd64 runner
 
-The Dockerfile uses Alpine Linux (musl libc). Native gems like `grpc` must compile
-from source — pre-built binary gems won't run on musl. Cross-compiling under QEMU
-emulation (arm64 Mac → amd64) exhausts Docker Desktop memory and fails. Building
-directly on the amd64 server avoids emulation entirely.
+The Dockerfile uses Alpine Linux (musl libc). Native gems like `grpc` must compile from source — pre-built binary gems
+won't run on musl — and cross-compiling under QEMU emulation (arm64 Mac → amd64) exhausts Docker Desktop's memory. The
+pipeline therefore builds on an amd64 GitLab runner and publishes the image to the project's container registry; the
+servers only pull it. See **Pipeline** below.
 
 ---
 
@@ -75,95 +75,25 @@ directly on the amd64 server avoids emulation entirely.
 
 ## First-time deployment
 
-### 1. Prepare the environment file
+The application is deployed by the GitLab pipeline: prepare the host and its env files as in **Pipeline → Setting up a
+host**, then release. Two things are done by hand, once per environment:
 
-Copy `.env.production` to the server:
+### Encryption keys (first deploy only)
 
-```bash
-scp .env.production itdevtd@192.168.230.54:~/cbz-helpengine/.env
-```
-
-Key values to review/update:
-
-| Variable | Notes |
-|---|---|
-| `FRONTEND_URL` | Must be the public URL users access the app from. If the DMZ nginx mounts the app under a sub-path (e.g. `/helpengine` — see below), include it here too: `https://pg.cbz.co.zw/helpengine`. `config/environments/production.rb` splits it into `host` + `script_name` for `default_url_options`, so every Rails-generated URL — including ActiveStorage media redirects (`/rails/active_storage/disk/…`) and the CSAT survey page's API base — carries the prefix. No `/rails/` location is needed on the DMZ nginx. |
-| `SAFE_FETCH_ALLOWED_INTERNAL_HOSTS` | Comma-separated `host` or `host:port` entries Chatwoot may call despite its SSRF guard, which refuses any private address (`ssrf_filter`: "has no public ip addresses"). Needed for the outgoing webhook to WA-Bot-Engine: `192.168.3.150:5005,192.168.230.39:5005` (UAT and prod bots). Fork patch (`SafeFetch::AllowedInternalHosts`); unset allows nothing; the list is **per instance** — a new Chatwoot deployment needs its own value. |
-| `POSTGRES_PASSWORD` | Strong random password |
-| `REDIS_PASSWORD` | Strong random password |
-| `SECRET_KEY_BASE` | 128-char hex string — generate with `openssl rand -hex 64` |
-| `SMTP_*` | CBZ mail relay settings |
-| `ACTIVE_RECORD_ENCRYPTION_*` | Generate after first boot (see step 6) |
-
-### 2. Copy the compose file
+Every environment needs its own three Active Record Encryption values in `deploy/env/helpengine.env` before its first
+release (`scripts/check-env.sh` refuses to deploy without them). Any random strings work:
 
 ```bash
-scp docker-compose.production.yaml itdevtd@192.168.230.54:~/cbz-helpengine/
+for k in PRIMARY_KEY DETERMINISTIC_KEY KEY_DERIVATION_SALT; do echo "ACTIVE_RECORD_ENCRYPTION_$k=$(openssl rand -hex 32)"; done
 ```
 
-### 3. Build the image on the server
+**Never change them on an environment that has data** (nor `SECRET_KEY_BASE`): encrypted columns become unreadable and
+everyone is signed out. Production keeps the values it already has.
 
-Sync source code (~1 minute over LAN):
+### Complete onboarding
 
-```bash
-cd "/path/to/chatwoot"
-rsync -az --delete --exclude='node_modules' --exclude='tmp' --exclude='log' \
-  . itdevtd@192.168.230.54:~/cbz-source/
-```
-
-SSH in and build:
-
-```bash
-ssh itdevtd@192.168.230.54
-cd ~/cbz-source
-docker build -f docker/Dockerfile -t cbz-helpengine:latest . 2>&1 | tee ~/cbz-build.log
-```
-
-Build time: ~25–35 minutes (gRPC compilation is the long step).
-
-> **If the build fails with `Permission denied` on `apk update`** — transient Alpine
-> CDN issue. Re-run the build command; it picks up cached layers and skips completed steps.
-
-### 4. Start the stack
-
-```bash
-cd ~/cbz-helpengine
-docker compose -f docker-compose.production.yaml up -d
-```
-
-Wait ~20 seconds, then run the database setup (first deploy only):
-
-```bash
-docker compose -f docker-compose.production.yaml exec rails bundle exec rails db:chatwoot_prepare
-```
-
-### 5. Generate Active Record Encryption keys (first deploy only)
-
-```bash
-docker compose -f docker-compose.production.yaml exec rails bundle exec rails db:encryption:init
-```
-
-Copy the three printed values into `~/cbz-helpengine/.env`:
-
-```bash
-cat >> ~/cbz-helpengine/.env << 'EOF'
-
-ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY=<value>
-ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY=<value>
-ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT=<value>
-EOF
-```
-
-Also update `.env.production` in this repo (keep them in sync), then restart:
-
-```bash
-docker compose -f docker-compose.production.yaml restart rails sidekiq
-```
-
-### 6. Complete onboarding
-
-Open `http://192.168.230.54:3000` temporarily (before nginx is set up) and follow
-the setup wizard to create the first super admin account.
+On a new environment's first release, the migrate step loads the schema and seeds an empty database. Open the
+environment's URL and follow the setup wizard to create the first super admin account.
 
 ---
 
@@ -528,26 +458,125 @@ permanent system user token via Meta Business Suite → Settings → System User
 
 ---
 
-## Subsequent deployments (updates)
+## Pipeline
 
-A `deploy.sh` script in the repository root handles the full deploy in one command from your Mac:
+`.gitlab-ci.yml` with the job logic in `scripts/ci/` (each script runs the same on a developer machine). Releases are
+tags; nothing deploys from a branch push.
+
+| Trigger | What runs |
+|---|---|
+| Merge request, push to `dev` or `master` | Checks: RuboCop, the specs in `scripts/ci/specs.txt` (every spec the CBZ fork changed plus the WhatsApp ones), dependency audit, image build. Nothing is published or deployed. |
+| Tag `helpengine-vX.Y.Z-rc.N` on a `dev` commit | **UAT**: checks → build and publish → *migrate* (press play) → deploy → verify |
+| Tag `helpengine-vX.Y.Z` on a `master` commit | **Production**: checks (the dependency audit blocks) → build and publish → *migrate* (press play; the production environment's approvers must approve) → deploy → verify |
+| Run pipeline on `dev` with `ROLLBACK_VERSION` and `ROLLBACK_ENV` | Puts that environment back on a published version |
+
+- **Versions** are the HelpEngine's own (`1.0.0`, `1.0.1`, …); the upstream Chatwoot release each build is based on is in the
+  image label `zw.co.cbz.chatwoot.version` (from `VERSION_CW`). Tags carry the `helpengine-` prefix because the repository
+  also holds upstream Chatwoot's `v*` tags. **Push a tag by name** (`git push gitlab helpengine-v1.0.0-rc.1`), never
+  `git push --tags`, which would send all of upstream's tags to GitLab.
+- **Images**: `<registry>/cbz-solutions/digitalchannels/cbz-helpengine/helpengine:<version>`, one image for rails,
+  sidekiq and migrate. A published version is immutable (the build refuses an existing one); a stable release also moves
+  `<major>.<minor>`. There is no `latest`. The image runs as uid 1000 on a read-only filesystem, with a health check on
+  Rails' `/health`.
+- **Safeguards**: a release tag must be on `dev` (UAT) or `master` (production) or the build refuses; the env files are
+  checked by name before anything starts; migrations are their own approved step before the new release starts; verify
+  waits up to three minutes for rails and sidekiq to be healthy on exactly this version; every release job appends a line
+  (who, which job, which release, how it ended) to `deploy-audit.log` in the deploy folder.
+
+### Releasing
 
 ```bash
-cd "/path/to/chatwoot"
-./deploy.sh
+# UAT: tag a dev commit
+git fetch gitlab && git tag helpengine-v1.1.0-rc.1 gitlab/dev && git push gitlab helpengine-v1.1.0-rc.1
+# Production: merge dev → master by merge request (a maintainer), then tag the merge commit on master
+git fetch gitlab && git tag helpengine-v1.1.0 gitlab/master && git push gitlab helpengine-v1.1.0
 ```
 
-The script:
-1. `rsync --delete` — mirrors source to `~/cbz-source/` on the server (including deletions/renames)
-2. Builds the Docker image on the server with BuildKit cache mounts (subsequent builds are faster)
-3. Recreates the `rails` and `sidekiq` containers from the new image
-4. Waits 25 seconds then tails recent logs to confirm Puma started
+Then open the pipeline: press play on `migrate_uat` / `migrate_production` (on an existing database it only migrates).
+Deploy and verify follow. A failed deploy after a successful publish needs a new tag (`-rc.2`, `1.1.1`), not a re-run of
+the build.
 
-> To pick up changes to `.env`, you still need to manually restart with `up -d` after editing the file — `deploy.sh` only restarts containers using `--force-recreate` against the current `.env`.
+### Rolling back
+
+CI/CD → Pipelines → **Run pipeline**, branch **`dev`** (never the tag of the version you want: an older tag's pipeline has
+no rollback job), variables `ROLLBACK_VERSION=1.0.0` (or `1.1.0-rc.1` on UAT) and `ROLLBACK_ENV=uat|production`. It pulls
+that version and restarts rails and sidekiq on it: nothing is built and no migration is run or undone. It refuses when
+the two versions differ in migrations, in either direction (`scripts/ci/schema-guard.sh`); `ALLOW_SCHEMA_CHANGE=true`
+overrides it, only if you know the schema already matches.
+
+### GitLab settings (a maintainer or admin; settings, not files)
+
+1. **Runners** (shell executor, the `gitlab-runner` user in the `docker` group):
+   - on the UAT host, tag `helpengine_uat`: UAT jobs, the checks and the image builds (it must be amd64);
+   - on the production host, tag `helpengine_prod`, **protected** so only protected refs (the release tags) reach it.
+   - Merge-request checks run on the UAT runner, and a shell runner with Docker is effectively root on its host. That is
+     an accepted risk while there is no separate check runner; record it if it stays.
+2. **Protected tags** `helpengine-v*`: allowed to create = Developers + Maintainers (so UAT can be released), which also
+   stops tags being deleted or moved.
+3. **Protected environment** `production`: deploy = Maintainers, with at least one named approver. UAT needs none, but its
+   jobs are audited like production's.
+4. **CI/CD variables**, only where the defaults in `.gitlab-ci.yml` differ: `BUILD_RUNNER_TAG`, `UAT_RUNNER_TAG`,
+   `PROD_RUNNER_TAG`, `UAT_DEPLOY_DIR`, `PROD_DEPLOY_DIR` (default `/opt/docker/cbz-helpengine`), `UAT_URL`, `PROD_URL`.
+5. The container registry is enabled for the project (it is).
+
+### Setting up a host
+
+In the deploy folder (`/opt/docker/cbz-helpengine` by default, owned by `gitlab-runner`); the first release copies the
+compose file, `scripts/check-env.sh` and the templates into it, and never touches the real env files:
+
+```bash
+sudo mkdir -p /opt/docker/cbz-helpengine/deploy/env && sudo chown -R gitlab-runner: /opt/docker/cbz-helpengine
+cd /opt/docker/cbz-helpengine
+# from a checkout of this repository: deploy/env/*.env.example → deploy/env/<name>.env, compose.env.example → .env
+chmod 600 .env deploy/env/*.env
+scripts/check-env.sh all     # names only, never values
+```
+
+| File | Holds |
+|---|---|
+| `.env` | Compose settings: `COMPOSE_PROFILES=bundled-db` while Postgres runs on this host, the bind address and port |
+| `deploy/env/helpengine.env` | Rails, Sidekiq and migrate: secrets, database, Redis, mail, `FRONTEND_URL`, `SAFE_FETCH_ALLOWED_INTERNAL_HOSTS`, … |
+| `deploy/env/redis.env`, `deploy/env/postgres.env` | The datastore passwords (must equal the ones in `helpengine.env`; the check compares them) |
+
+### Moving the current production onto the pipeline (once)
+
+Production today runs from `~/cbz-helpengine` (`.env` and the old compose file, image `cbz-helpengine:latest`, built on
+the server by `deploy.sh`). The new compose file keeps the project name `cbz-helpengine` and the volume names, so the
+first pipeline release attaches to the existing data. Do it in a quiet window:
+
+1. **Back up first**, and copy the files off the host:
+   `docker compose -f ~/cbz-helpengine/docker-compose.production.yaml exec -T postgres pg_dump -U postgres -Fc cbz_helpengine > ~/helpengine-$(date +%F).dump`
+   and `docker run --rm -v cbz-helpengine_storage_data:/s -v ~/:/b alpine tar czf /b/helpengine-storage-$(date +%F).tgz -C /s .`
+2. **Pin the datastores to what runs now**: `docker inspect --format '{{.Image}}' $(docker ps -qf name=cbz-helpengine-redis) $(docker ps -qf name=cbz-helpengine-postgres)`,
+   then put those digests in `docker-compose.production.yaml` (`redis:alpine@sha256:…`, `pgvector/pgvector:pg16@sha256:…`)
+   by merge request. Redis must not move to an older major than the data was written with.
+3. **Set up the deploy folder** as above, carrying the existing values over: `deploy/env/helpengine.env` is the old
+   `.env` (keep `SECRET_KEY_BASE`, the three `ACTIVE_RECORD_ENCRYPTION_*`, `POSTGRES_PASSWORD` and `REDIS_PASSWORD`
+   exactly), plus `WEB_CONCURRENCY`, `SAFE_FETCH_ALLOWED_INTERNAL_HOSTS` and `UC_PORTAL_URL`; `redis.env` and
+   `postgres.env` get the same two passwords; `.env` gets `COMPOSE_PROFILES=bundled-db`. Run `scripts/check-env.sh all`.
+4. **Release** `helpengine-vX.Y.Z` from `master`. `migrate_production` only migrates the existing database; its `prepare`
+   step also hands the uploads volume to uid 1000 once (releases before the pipeline ran as root). The deploy recreates
+   rails and sidekiq from the published image and removes the old compose file's unused `base` container.
+5. **Check** sign-in, an existing conversation's attachments (the volume hand-over), and a WhatsApp handoff from the
+   engine.
+6. **If it goes wrong**: `cd ~/cbz-helpengine && docker compose -f docker-compose.production.yaml up -d` brings back the
+   old containers on `cbz-helpengine:latest`, on the same data (root still reads the handed-over uploads). Once the new
+   release has run cleanly for a few days, delete `~/cbz-source`, the old image, and the old `.env` (after taking it
+   offline).
+
+### Still open
+
+- **Production database**: Postgres runs in a container on the application host with no backup schedule. Move it to a
+  database server with backups (then drop `bundled-db` from `.env` and point `POSTGRES_HOST` at it), or at least schedule
+  `pg_dump` with off-host copies.
+- **Audit log**: `deploy-audit.log` is append-only by convention; ship it to the central log for production.
+- **UAT host**: the pipeline expects a UAT host with its own runner, deploy folder and URL (`UAT_URL`).
 
 ---
 
 ## Useful commands
+
+In the deploy folder (`/opt/docker/cbz-helpengine`):
 
 ```bash
 # View live logs
@@ -562,8 +591,7 @@ docker compose -f docker-compose.production.yaml exec rails bundle exec rails co
 # Stop everything
 docker compose -f docker-compose.production.yaml down
 
-# Stop and wipe database volumes (DESTRUCTIVE — loses all data)
-docker compose -f docker-compose.production.yaml down -v
+# Never: `down -v` deletes the database, Redis and uploads volumes (all data)
 ```
 
 ---
@@ -574,10 +602,10 @@ docker compose -f docker-compose.production.yaml down -v
 
 | Path | Purpose |
 |---|---|
-| `~/cbz-helpengine/.env` | Production environment variables (not in repo — back up separately) |
-| `~/cbz-helpengine/docker-compose.production.yaml` | Compose stack definition |
-| `~/cbz-source/` | Source code used for builds |
-| `~/cbz-build.log` | Log from the last Docker build |
+| `/opt/docker/cbz-helpengine/.env`, `deploy/env/*.env` | Compose settings and the containers' environment (not in the repo — back up separately) |
+| `/opt/docker/cbz-helpengine/docker-compose.production.yaml` | Compose stack definition (copied by each release) |
+| `/opt/docker/cbz-helpengine/deploy-audit.log` | One line per release job: who, which job, which release, how it ended |
+| `~/cbz-helpengine/`, `~/cbz-source/` | The pre-pipeline install; delete once the first pipeline release has run cleanly |
 | `/etc/nginx/sites-available/cbz-helpengine` | nginx site config |
 | `/etc/nginx/ssl/cbz.co.zw.crt` | Wildcard SSL certificate (expires Mar 15 2028) |
 | `/etc/nginx/ssl/cbz.co.zw.key` | Wildcard SSL private key |

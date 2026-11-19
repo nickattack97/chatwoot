@@ -139,6 +139,9 @@ Things this fork does that upstream doesn't — check before assuming upstream b
   untouched. Such inboxes never register or remove Meta's webhook and can't do calling. Any new Graph call for
   WhatsApp Cloud needs its 360dialog counterpart there. Setup: `DEPLOYMENT.md` → "Numbers hosted at 360dialog".
 - **UC/Entra SAML SSO** with no native login fallback; `uc_sign_in` Rack::Attack throttles.
-- **Deployment** is `./deploy.sh` (rsync + docker build on the server). See
-  `DEPLOYMENT.md`, especially "WA-Bot-Engine integration" for the inbox/webhook settings
-  that fail silently when wrong.
+- **Deployment** is the GitLab pipeline (`.gitlab-ci.yml`, logic in `scripts/ci/`): tag `helpengine-vX.Y.Z-rc.N` on
+  `dev` releases to UAT, `helpengine-vX.Y.Z` on `master` to production (versioned image in the project registry, manual
+  migrate step, health-verified deploy, rollback pipeline). `deploy.sh` is retired. Push tags by name, never
+  `git push --tags` (upstream's `v*` tags live in this repo too). Production compose keeps the project name
+  `cbz-helpengine` and its volume names: renaming them starts on empty data. See `DEPLOYMENT.md` → "Pipeline", and
+  "WA-Bot-Engine integration" for the inbox/webhook settings that fail silently when wrong.
