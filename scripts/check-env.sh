@@ -52,7 +52,7 @@ check() {
       require SAFE_FETCH_ALLOWED_INTERNAL_HOSTS "the WA-Bot-Engine host:port for this environment"
       require UC_BASE_URL "this environment's UserConnect: sign-in is switched on with it when the database is created"
       require UC_SYSTEM_ID "the HelpEngine's system ID in this UserConnect"
-      case "$(get UC_BASE_URL)" in http://*|https://*|CHANGE_ME*) ;; *) problem "UC_BASE_URL must start with http:// or https://";; esac
+      case "$(get UC_BASE_URL)" in ""|http://*|https://*|CHANGE_ME*) ;; *) problem "UC_BASE_URL must start with http:// or https://";; esac
       case "$(get UC_BASE_URL)" in */api/v1|*/api/v1/) problem "UC_BASE_URL must not end in /api/v1 (the app adds it)";; esac
       has UC_PORTAL_URL || echo "  note: UC_PORTAL_URL is empty, so the change-password link goes nowhere"
       if bundled_db; then
