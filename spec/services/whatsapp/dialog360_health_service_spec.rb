@@ -53,6 +53,15 @@ RSpec.describe Whatsapp::Dialog360HealthService do
     expect(WebMock).not_to have_requested(:any, /test_key/)
   end
 
+  it 'reports the webhook as managed outside Chatwoot, with no Chatwoot URL to expect' do
+    stub_health(body: phone_health_response.merge('webhook_configuration' => { 'application' => 'https://callbacker-v2.360dialog.io/webhook/1/abc' }))
+
+    result = service.sync_health_status!
+
+    expect(result).to include(webhook_managed_externally: true, expected_webhook_url: nil)
+    expect(result[:webhook_configuration]).to eq('application' => 'https://callbacker-v2.360dialog.io/webhook/1/abc')
+  end
+
   it "records 360dialog's own error when the key is refused" do
     stub_health(status: 401, body: { error: 'Invalid api token.' })
 

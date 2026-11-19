@@ -1222,6 +1222,8 @@
         "REGISTER_ERROR": "Failed to register webhook. Please try again.",
         "CONFIGURED_SUCCESS": "Webhook configured successfully",
         "URL_MISMATCH": "Webhook URL mismatch",
+        "MANAGED_EXTERNALLY": "Managed outside Chatwoot",
+        "MANAGED_EXTERNALLY_HINT": "This number is hosted at 360dialog. Meta delivers its messages to 360dialog, which forwards them to the system that owns the number; conversations reach this inbox from there. Nothing needs registering here.",
         "CONFIGURED_URL": "Configured URL",
         "EXPECTED_URL": "Expected URL",
         "COPY_URL": "Copy webhook URL",

@@ -122,4 +122,59 @@ describe('AccountHealth', () => {
     expect(wrapper.text()).toContain('The connection needs to be refreshed');
     expect(wrapper.text()).not.toContain('Stale Business Name');
   });
+
+  describe('webhook configuration', () => {
+    // Render the stubbed buttons' labels so the register action can be looked for by its text.
+    const mountWithLabels = healthData =>
+      shallowMount(AccountHealth, {
+        props: { healthData },
+        global: { renderStubDefaultSlot: true },
+      });
+
+    it('treats a 360dialog-hosted number as managed outside Chatwoot, with nothing to register', () => {
+      const wrapper = mountWithLabels({
+        webhook_configuration: {
+          application: 'https://callbacker-v2.360dialog.io/webhook/1/abc',
+        },
+        expected_webhook_url: null,
+        webhook_managed_externally: true,
+      });
+
+      const text = wrapper.text();
+      expect(text).toContain(
+        'INBOX_MGMT.ACCOUNT_HEALTH.WEBHOOK.MANAGED_EXTERNALLY'
+      );
+      expect(text).toContain(
+        'https://callbacker-v2.360dialog.io/webhook/1/abc'
+      );
+      expect(text).not.toContain(
+        'INBOX_MGMT.ACCOUNT_HEALTH.WEBHOOK.URL_MISMATCH'
+      );
+      expect(text).not.toContain(
+        'INBOX_MGMT.ACCOUNT_HEALTH.WEBHOOK.EXPECTED_URL'
+      );
+      expect(text).not.toContain(
+        'INBOX_MGMT.ACCOUNT_HEALTH.WEBHOOK.REGISTER_BUTTON'
+      );
+    });
+
+    it('still reports a mismatch and offers to register for a Graph inbox', () => {
+      const wrapper = mountWithLabels({
+        webhook_configuration: {
+          application: 'https://elsewhere.example/hook',
+        },
+        expected_webhook_url:
+          'https://app.example/webhooks/whatsapp/+15550001111',
+      });
+
+      const text = wrapper.text();
+      expect(text).toContain('INBOX_MGMT.ACCOUNT_HEALTH.WEBHOOK.URL_MISMATCH');
+      expect(text).toContain(
+        'INBOX_MGMT.ACCOUNT_HEALTH.WEBHOOK.REGISTER_BUTTON'
+      );
+      expect(text).not.toContain(
+        'INBOX_MGMT.ACCOUNT_HEALTH.WEBHOOK.MANAGED_EXTERNALLY'
+      );
+    });
+  });
 });

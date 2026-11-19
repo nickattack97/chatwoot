@@ -1,14 +1,17 @@
 # Health for a number hosted at 360dialog (provider_config api_host: 360dialog). The phone number's
 # fields come from 360dialog's /health_status, which mirrors Meta's phone-number node, and the business
 # profile from its /whatsapp_business_profile. 360dialog has no endpoint for the WABA's name or owning
-# business, so those stay empty. Formatting, persistence and risk logging are inherited unchanged.
+# business, so those stay empty. Meta's webhook for the number points at 360dialog's relay, which forwards to whatever
+# owns the number (WA-Bot-Engine), never at Chatwoot: there is no Chatwoot URL to expect, so the panel is told the
+# webhook is managed outside Chatwoot instead of reporting a mismatch and offering to "fix" it. Formatting, persistence
+# and risk logging are inherited unchanged.
 class Whatsapp::Dialog360HealthService < Whatsapp::HealthService
   private
 
   def fetch_health_status_with_error(include_business_profile:)
     validate_channel!
 
-    phone_health = format_phone_health_response(fetch_phone_number_data)
+    phone_health = format_phone_health_response(fetch_phone_number_data).merge(expected_webhook_url: nil, webhook_managed_externally: true)
     business_health = format_business_account_response({})
     profile_health = { business_profile: Whatsapp::BusinessProfileService.new(@channel, api_version: @api_version).fetch } if include_business_profile
     [phone_health.merge(business_health, profile_health || {}), nil]
