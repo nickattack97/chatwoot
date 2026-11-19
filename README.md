@@ -1,5 +1,8 @@
-<img src="./.github/screenshots/header.png#gh-light-mode-only" width="100%" alt="Header light mode"/>
-<img src="./.github/screenshots/header-dark.png#gh-dark-mode-only" width="100%" alt="Header dark mode"/>
+<!-- Screenshots load from Chatwoot's GitHub (pinned to the release tag): CBZ's GitLab proxy refuses any path containing "/.git", which includes ./.github/. -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/chatwoot/chatwoot/v4.20.0/.github/screenshots/header-dark.png">
+  <img src="https://raw.githubusercontent.com/chatwoot/chatwoot/v4.20.0/.github/screenshots/header.png" width="100%" alt="Chatwoot"/>
+</picture>
 
 ___
 
@@ -29,8 +32,10 @@ The modern customer support platform, an open-source alternative to Intercom, Ze
   </a>
 </p>
 
-<img src="./.github/screenshots/dashboard.png#gh-light-mode-only" width="100%" alt="Chat dashboard dark mode"/>
-<img src="./.github/screenshots/dashboard-dark.png#gh-dark-mode-only" width="100%" alt="Chat dashboard"/>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/chatwoot/chatwoot/v4.20.0/.github/screenshots/dashboard-dark.png">
+  <img src="https://raw.githubusercontent.com/chatwoot/chatwoot/v4.20.0/.github/screenshots/dashboard.png" width="100%" alt="Chatwoot conversation dashboard"/>
+</picture>
 
 ---
 
