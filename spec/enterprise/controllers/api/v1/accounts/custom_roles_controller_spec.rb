@@ -16,7 +16,8 @@ RSpec.describe 'Custom Roles API', type: :request do
         expect(response).to have_http_status(:success)
         body = JSON.parse(response.body)
 
-        expect(body[0]).to include('name' => custom_role.name)
+        # Accounts also get the CBZ default Supervisor role on create.
+        expect(body.pluck('name')).to include(custom_role.name)
       end
     end
 
@@ -153,7 +154,7 @@ RSpec.describe 'Custom Roles API', type: :request do
                headers: administrator.create_new_auth_token
 
         expect(response).to have_http_status(:success)
-        expect(CustomRole.count).to eq(0)
+        expect(CustomRole.exists?(custom_role.id)).to be(false)
       end
     end
 

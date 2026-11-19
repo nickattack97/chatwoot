@@ -3,7 +3,7 @@
 require 'rails_helper'
 
 RSpec.describe UserConnect::UserFinderService, type: :service do
-  let(:account) { create(:account) }
+  let!(:account) { create(:account) }
   let(:claims) do
     {
       email: 'user@example.com',
@@ -21,7 +21,7 @@ RSpec.describe UserConnect::UserFinderService, type: :service do
 
   describe '#perform' do
     it 'assigns the Supervisor custom role when the userconnect role matches it' do
-      custom_role = create(:custom_role, account: account, name: 'Supervisor', permissions: %w[report_manage label_manage team_manage])
+      custom_role = account.custom_roles.find_by!(name: 'Supervisor')
 
       service = described_class.new(claims)
       user = service.perform
@@ -32,6 +32,8 @@ RSpec.describe UserConnect::UserFinderService, type: :service do
     end
 
     it 'keeps the agent role when there is no matching custom role' do
+      account.custom_roles.find_by!(name: 'Supervisor').destroy!
+
       service = described_class.new(claims)
       user = service.perform
       account_user = AccountUser.find_by(user: user, account: account)

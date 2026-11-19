@@ -24,7 +24,7 @@ RSpec.describe InboxPolicy, type: :policy do
 
     context 'when agent has inbox_manage permission' do
       let(:custom_role) { create(:custom_role, account: account, permissions: ['inbox_manage']) }
-      let(:agent) { create(:user, account: account) }
+      let(:agent) { create(:user) }
       let(:agent_context) do
         { user: agent, account: account, account_user: create(:account_user, user: agent, account: account, role: :agent, custom_role: custom_role) }
       end
