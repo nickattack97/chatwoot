@@ -1049,4 +1049,60 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
   def contact_from_number
     Contact.find_by(phone_number: contact_phone_number)
   end
+
+  describe 'a 360dialog-hosted number' do
+    after do
+      Redis::Alfred.scan_each(match: 'MESSAGE_SOURCE_KEY::*') { |key| Redis::Alfred.delete(key) }
+    end
+
+    let!(:whatsapp_channel) do
+      create(:channel_whatsapp, provider: 'whatsapp_cloud', provider_config: { 'api_host' => '360dialog' },
+                                sync_templates: false, validate_provider_config: false)
+    end
+    let(:json) { { 'content-type' => 'application/json' } }
+    let(:params) do
+      {
+        phone_number: whatsapp_channel.phone_number,
+        object: 'whatsapp_business_account',
+        entry: [{ changes: [{ value: {
+          contacts: [{ profile: { name: 'Jane Doe' }, wa_id: '15550002222' }],
+          messages: [{ from: '15550002222', id: 'wamid.in.1', timestamp: '1664799904', type: 'image',
+                       image: { id: 'MEDIA9', mime_type: 'image/png', sha256: 'sha', caption: 'My ID' } }]
+        } }] }]
+      }.with_indifferent_access
+    end
+
+    def stub_media_info(url)
+      stub_request(:get, 'https://waba-v2.360dialog.io/MEDIA9')
+        .with(headers: { 'D360-API-KEY' => 'test_key' })
+        .to_return(status: 200, headers: json,
+                   body: { messaging_product: 'whatsapp', url: url, mime_type: 'image/png', id: 'MEDIA9' }.to_json)
+    end
+
+    it "resolves the media on 360dialog and downloads it from 360dialog instead of Meta's CDN" do
+      stub_media_info('https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=MEDIA9&ext=1&hash=AT')
+      download = stub_request(:get, 'https://waba-v2.360dialog.io/whatsapp_business/attachments/?mid=MEDIA9&ext=1&hash=AT')
+                 .with(headers: { 'D360-API-KEY' => 'test_key' })
+                 .to_return(status: 200, body: File.read('spec/assets/sample.png'), headers: { 'content-type' => 'image/png' })
+
+      described_class.new(inbox: whatsapp_channel.inbox, params: params).perform
+
+      message = whatsapp_channel.inbox.messages.last
+      expect(download).to have_been_requested
+      expect(message.content).to eq('My ID')
+      expect(message.attachments.count).to eq(1)
+      expect(WebMock).not_to have_requested(:any, /lookaside\.fbsbx\.com|graph\.facebook\.com/)
+    end
+
+    it 'keeps the message but skips a download link on another host, so the API key is never sent there' do
+      stub_media_info('https://attacker.example/steal?mid=MEDIA9')
+
+      described_class.new(inbox: whatsapp_channel.inbox, params: params).perform
+
+      message = whatsapp_channel.inbox.messages.last
+      expect(message.content).to eq('My ID')
+      expect(message.attachments).to be_empty
+      expect(WebMock).not_to have_requested(:any, /attacker\.example/)
+    end
+  end
 end

@@ -39,6 +39,9 @@ class Whatsapp::WebhookSetupService
 
   def validate_parameters!
     raise ArgumentError, 'Channel is required' if @channel.blank?
+    # Meta's webhook for a 360dialog-hosted number is managed outside Chatwoot; registering
+    # Chatwoot's URL here would take the number's traffic off the system that owns it.
+    raise ArgumentError, 'Webhooks for 360dialog-hosted numbers are managed outside Chatwoot' if @channel.dialog360_cloud_api?
     raise ArgumentError, 'WABA ID is required' if @waba_id.blank?
     raise ArgumentError, 'Access token is required' if @access_token.blank?
     raise ArgumentError, 'Phone number ID is required' if @channel.provider_config['phone_number_id'].blank?

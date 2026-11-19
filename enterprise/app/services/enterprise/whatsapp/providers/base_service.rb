@@ -16,6 +16,9 @@ module Enterprise::Whatsapp::Providers::BaseService
   def parsed_error(response)
     parsed_response = response.parsed_response
     error = parsed_response.is_a?(Hash) ? parsed_response['error'] || {} : {}
+    # 360dialog reports its own errors (a refused key, an unpaid balance) as a plain string.
+    return { message: error }.compact_blank.presence if error.is_a?(String)
+
     {
       code: error['code'],
       title: error['error_user_title'].presence || error['title'],

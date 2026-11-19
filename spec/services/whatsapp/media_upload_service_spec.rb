@@ -69,4 +69,24 @@ describe Whatsapp::MediaUploadService do
       expect(WebMock).not_to have_requested(:post, upload_url)
     end
   end
+
+  describe 'a 360dialog-hosted number' do
+    let(:whatsapp_channel) do
+      create(:channel_whatsapp, provider: 'whatsapp_cloud', provider_config: { 'api_host' => '360dialog' },
+                                validate_provider_config: false, sync_templates: false)
+    end
+    let(:dialog360_upload_url) { 'https://waba-v2.360dialog.io/media' }
+
+    it 'uploads to 360dialog with the API key instead of a bearer token' do
+      stub_request(:post, dialog360_upload_url)
+        .to_return(status: 200, body: { id: 'media_360' }.to_json, headers: { 'Content-Type' => 'application/json' })
+
+      expect(service.perform).to eq({ 'id' => 'media_360' })
+      expect(WebMock).to(have_requested(:post, dialog360_upload_url).with do |request|
+        request.headers['D360-Api-Key'] == 'test_key' && request.headers['Authorization'].nil? &&
+          request.body.b.include?('name="file"; filename="avatar.png"'.b)
+      end)
+      expect(WebMock).not_to have_requested(:post, upload_url)
+    end
+  end
 end

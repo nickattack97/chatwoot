@@ -118,4 +118,16 @@ RSpec.describe Whatsapp::WebhookTeardownService do
       end
     end
   end
+
+  describe 'a 360dialog-hosted number' do
+    it 'leaves the webhook and the number alone' do
+      channel = create(:channel_whatsapp, provider: 'whatsapp_cloud', provider_config: { 'api_host' => '360dialog' },
+                                          validate_provider_config: false, sync_templates: false)
+      allow(Whatsapp::FacebookApiClient).to receive(:new)
+
+      described_class.new(channel).perform
+
+      expect(Whatsapp::FacebookApiClient).not_to have_received(:new)
+    end
+  end
 end

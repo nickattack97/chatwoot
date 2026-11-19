@@ -373,4 +373,55 @@ RSpec.describe Whatsapp::CsatTemplateService do
       end
     end
   end
+
+  describe 'a 360dialog-hosted number' do
+    let(:whatsapp_channel) do
+      create(:channel_whatsapp, account: account, provider: 'whatsapp_cloud', provider_config: { 'api_host' => '360dialog' },
+                                sync_templates: false, validate_provider_config: false)
+    end
+    let(:dialog360_headers) { { 'D360-API-KEY' => 'test_key', 'Content-Type' => 'application/json' } }
+    let(:json) { { 'Content-Type' => 'application/json' } }
+
+    it "creates the template through 360dialog's template management API" do
+      whatsapp_channel.inbox.update!(csat_config: {})
+      stub = stub_request(:post, 'https://waba-v2.360dialog.io/v1/configs/templates')
+             .with(headers: dialog360_headers,
+                   body: hash_including('name' => expected_template_name, 'category' => 'UTILITY', 'language' => 'en'))
+             .to_return(status: 200, headers: json,
+                        body: { id: 'tmpl-1', name: expected_template_name, status: 'PENDING', category: 'UTILITY' }.to_json)
+
+      result = service.create_template(template_config)
+
+      expect(stub).to have_been_requested
+      expect(result).to include(success: true, template_id: 'tmpl-1', template_name: expected_template_name, status: 'PENDING')
+    end
+
+    it 'reads the template status from 360dialog' do
+      stub_request(:get, "https://waba-v2.360dialog.io/message_templates?name=#{expected_template_name}")
+        .with(headers: dialog360_headers)
+        .to_return(status: 200, headers: json,
+                   body: { data: [{ id: 'tmpl-1', name: expected_template_name, status: 'APPROVED', language: 'en' }] }.to_json)
+
+      result = service.get_template_status(expected_template_name)
+
+      expect(result).to eq(success: true, template: { id: 'tmpl-1', name: expected_template_name, status: 'APPROVED', language: 'en' })
+    end
+
+    it "deletes the template through 360dialog's template management API" do
+      stub = stub_request(:delete, "https://waba-v2.360dialog.io/v1/configs/templates/#{expected_template_name}")
+             .with(headers: dialog360_headers)
+             .to_return(status: 200, body: '{}', headers: json)
+
+      expect(service.delete_template(expected_template_name)).to include(success: true)
+      expect(stub).to have_been_requested
+    end
+
+    it 'never calls Graph' do
+      stub_request(:get, %r{waba-v2\.360dialog\.io/message_templates}).to_return(status: 200, body: { data: [] }.to_json, headers: json)
+
+      service.get_template_status(expected_template_name)
+
+      expect(WebMock).not_to have_requested(:any, /graph\.facebook\.com/)
+    end
+  end
 end

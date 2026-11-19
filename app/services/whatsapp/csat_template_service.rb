@@ -20,15 +20,12 @@ class Whatsapp::CsatTemplateService
 
   def delete_template(template_name = nil)
     template_name ||= CsatTemplateNameService.csat_template_name(@whatsapp_channel.inbox.id)
-    response = HTTParty.delete(
-      "#{business_account_path}/message_templates?name=#{template_name}",
-      headers: api_headers
-    )
+    response = HTTParty.delete(template_deletion_url(template_name), headers: api_headers)
     { success: response.success?, response_body: response.body }
   end
 
   def get_template_status(template_name)
-    response = HTTParty.get("#{business_account_path}/message_templates?name=#{template_name}", headers: api_headers)
+    response = HTTParty.get("#{message_templates_path}?name=#{template_name}", headers: api_headers)
 
     if response.success? && response['data']&.any?
       template_data = response['data'].first
@@ -97,7 +94,7 @@ class Whatsapp::CsatTemplateService
 
   def send_template_creation_request(request_body)
     HTTParty.post(
-      "#{business_account_path}/message_templates",
+      template_creation_url,
       headers: api_headers,
       body: request_body.to_json
     )
@@ -126,7 +123,36 @@ class Whatsapp::CsatTemplateService
     "#{api_base_path}/#{WHATSAPP_API_VERSION}/#{@whatsapp_channel.provider_config['business_account_id']}"
   end
 
+  def message_templates_path
+    return dialog360_api.message_templates_url if dialog360?
+
+    "#{business_account_path}/message_templates"
+  end
+
+  # 360dialog creates and deletes templates through its template management API; the WABA comes from the key.
+  def template_creation_url
+    return dialog360_api.template_management_url if dialog360?
+
+    "#{business_account_path}/message_templates"
+  end
+
+  def template_deletion_url(template_name)
+    return "#{dialog360_api.template_management_url}/#{ERB::Util.url_encode(template_name)}" if dialog360?
+
+    "#{business_account_path}/message_templates?name=#{template_name}"
+  end
+
+  def dialog360?
+    @whatsapp_channel.dialog360_cloud_api?
+  end
+
+  def dialog360_api
+    @dialog360_api ||= @whatsapp_channel.dialog360_cloud_api
+  end
+
   def api_headers
+    return dialog360_api.headers if dialog360?
+
     {
       'Authorization' => "Bearer #{@whatsapp_channel.provider_config['api_key']}",
       'Content-Type' => 'application/json'

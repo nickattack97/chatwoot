@@ -26,16 +26,22 @@ class Whatsapp::Providers::WhatsappCloudContactInfoRequestService < Whatsapp::Pr
   private
 
   def phone_id_path
+    return whatsapp_channel.dialog360_cloud_api.base_url if whatsapp_channel.dialog360_cloud_api?
+
     api_version = GlobalConfigService.load('WHATSAPP_API_VERSION', 'v22.0')
     base_url = ENV.fetch('WHATSAPP_CLOUD_BASE_URL', 'https://graph.facebook.com')
     "#{base_url}/#{api_version}/#{whatsapp_channel.provider_config['phone_number_id']}"
   end
 
   def api_headers
+    return whatsapp_channel.dialog360_cloud_api.headers if whatsapp_channel.dialog360_cloud_api?
+
     { 'Authorization' => "Bearer #{whatsapp_channel.provider_config['api_key']}", 'Content-Type' => 'application/json' }
   end
 
   def error_message(response)
+    return Whatsapp::Dialog360CloudApi.error_message(response) if whatsapp_channel.dialog360_cloud_api?
+
     response.parsed_response.dig('error', 'message') if response.parsed_response.is_a?(Hash)
   end
 end

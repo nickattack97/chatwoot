@@ -9,7 +9,8 @@ RSpec.describe Whatsapp::BusinessProfileService do
       provider_config: {
         'api_key' => 'test_access_token',
         'phone_number_id' => 'test_phone_number_id'
-      }
+      },
+      dialog360_cloud_api?: false
     )
   end
   let(:profile_response) do
@@ -55,5 +56,22 @@ RSpec.describe Whatsapp::BusinessProfileService do
     expect(Rails.logger).to have_received(:warn).with(
       '[WHATSAPP HEALTH] Business profile unavailable: phone_number_id=test_phone_number_id error_class=Timeout::Error'
     )
+  end
+
+  describe 'a 360dialog-hosted number' do
+    let(:channel) do
+      create(:channel_whatsapp, provider: 'whatsapp_cloud', provider_config: { 'api_host' => '360dialog' },
+                                validate_provider_config: false, sync_templates: false)
+    end
+
+    it 'reads the profile from 360dialog with the API key, never from Graph' do
+      stub = stub_request(:get, 'https://waba-v2.360dialog.io/whatsapp_business_profile')
+             .with(query: { fields: described_class::FIELDS.join(',') }, headers: { 'D360-API-KEY' => 'test_key' })
+             .to_return(status: 200, body: profile_response.to_json, headers: { 'Content-Type' => 'application/json' })
+
+      expect(service.fetch).to eq(profile_response['data'].first)
+      expect(stub).to have_been_requested
+      expect(WebMock).not_to have_requested(:any, /graph\.facebook\.com/)
+    end
   end
 end

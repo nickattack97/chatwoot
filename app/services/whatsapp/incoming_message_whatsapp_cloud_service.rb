@@ -19,11 +19,19 @@ class Whatsapp::IncomingMessageWhatsappCloudService < Whatsapp::IncomingMessageB
 
     return unless url_response.success?
 
-    downloaded_file = Down.download(url_response.parsed_response['url'], headers: inbox.channel.api_headers)
+    download_url = media_download_url(url_response)
+    return if download_url.blank?
+
+    downloaded_file = Down.download(download_url, headers: inbox.channel.api_headers)
     # WhatsApp Cloud sends the original filename in the payload; preserve it so accented
     # names keep their correct extension instead of relying on the mangled remote metadata.
     filename = attachment_payload[:filename]
     downloaded_file.define_singleton_method(:original_filename) { filename } if filename.present?
     downloaded_file
+  end
+
+  # A 360dialog-hosted number's media is re-hosted off Meta's CDN, and never fetched from another host.
+  def media_download_url(url_response)
+    inbox.channel.media_download_url(url_response.parsed_response['url'])
   end
 end

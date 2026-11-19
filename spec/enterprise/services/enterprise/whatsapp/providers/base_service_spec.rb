@@ -16,4 +16,10 @@ RSpec.describe Whatsapp::Providers::BaseService do
 
     expect(service.send(:parsed_error, response)).to include(message: 'Business eligibility check failed')
   end
+
+  it "reads 360dialog's own error, which is a plain string, instead of raising" do
+    response = Struct.new(:parsed_response).new({ 'error' => 'Invalid api token.' })
+
+    expect(service.send(:parsed_error, response)).to eq(message: 'Invalid api token.')
+  end
 end

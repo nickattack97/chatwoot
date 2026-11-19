@@ -475,4 +475,86 @@ RSpec.describe Channel::Whatsapp do
       expect(channel.inbound_calls_enabled?).to be false
     end
   end
+
+  describe '360dialog-hosted numbers' do
+    let(:account) { create(:account) }
+    let(:dialog360_config) { { 'api_host' => '360dialog', 'source' => 'manual', 'app_secret' => 'secret' } }
+
+    def create_dialog360_channel(**overrides)
+      create(:channel_whatsapp, account: account, provider: 'whatsapp_cloud', provider_config: dialog360_config,
+                                validate_provider_config: false, sync_templates: false, **overrides)
+    end
+
+    it 'is a whatsapp_cloud channel with api_host 360dialog' do
+      expect(create_dialog360_channel.dialog360_cloud_api?).to be true
+      graph_channel = create(:channel_whatsapp, account: account, provider: 'whatsapp_cloud',
+                                                validate_provider_config: false, sync_templates: false)
+      expect(graph_channel.dialog360_cloud_api?).to be false
+    end
+
+    it 'sends through the 360dialog provider, while Graph inboxes keep the Graph one' do
+      graph_channel = create(:channel_whatsapp, account: account, provider: 'whatsapp_cloud',
+                                                validate_provider_config: false, sync_templates: false)
+
+      expect(create_dialog360_channel.provider_service).to be_a(Whatsapp::Providers::Dialog360CloudService)
+      expect(graph_channel.provider_service).to be_an_instance_of(Whatsapp::Providers::WhatsappCloudService)
+    end
+
+    it "downloads media from 360dialog instead of Meta's CDN, and never from any other host" do
+      channel = create_dialog360_channel
+
+      expect(channel.media_download_url('https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=1'))
+        .to eq('https://waba-v2.360dialog.io/whatsapp_business/attachments/?mid=1')
+      expect(channel.media_download_url('https://attacker.example/x')).to be_nil
+    end
+
+    it "leaves a Graph inbox's media links untouched" do
+      graph_channel = create(:channel_whatsapp, account: account, provider: 'whatsapp_cloud',
+                                                validate_provider_config: false, sync_templates: false)
+
+      expect(graph_channel.media_download_url('https://lookaside.fbsbx.com/x?mid=1')).to eq('https://lookaside.fbsbx.com/x?mid=1')
+    end
+
+    it 'rejects any other api_host' do
+      channel = build(:channel_whatsapp, account: account, provider: 'whatsapp_cloud', provider_config: { 'api_host' => 'other' })
+
+      expect(channel).not_to be_valid
+      expect(channel.errors[:provider_config]).to include('api_host must be 360dialog on a whatsapp_cloud channel')
+    end
+
+    it 'rejects api_host on the legacy 360dialog provider' do
+      channel = build(:channel_whatsapp, account: account, provider: 'default',
+                                         provider_config: { 'api_key' => 'key', 'api_host' => '360dialog' })
+
+      expect(channel).not_to be_valid
+      expect(channel.errors[:provider_config]).to include('api_host must be 360dialog on a whatsapp_cloud channel')
+    end
+
+    it 'never registers a Meta webhook when created, even outside embedded signup' do
+      allow(Whatsapp::WebhookSetupService).to receive(:new)
+
+      create_dialog360_channel
+
+      expect(Whatsapp::WebhookSetupService).not_to have_received(:new)
+    end
+
+    it 'never removes the Meta webhook or deregisters the number when deleted' do
+      channel = create_dialog360_channel
+      allow(Whatsapp::FacebookApiClient).to receive(:new)
+
+      channel.destroy!
+
+      expect(Whatsapp::FacebookApiClient).not_to have_received(:new)
+    end
+
+    it 'does not support calling, which is Graph-only' do
+      account.enable_features!('channel_voice')
+      channel = create_dialog360_channel
+      channel.update!(provider_config: channel.provider_config.merge('calling_enabled' => true))
+
+      expect(channel.voice_calling_supported?).to be false
+      expect(channel.voice_enabled?).to be false
+      expect { channel.enable_voice_calling! }.to raise_error('WhatsApp calling requires a whatsapp_cloud inbox')
+    end
+  end
 end

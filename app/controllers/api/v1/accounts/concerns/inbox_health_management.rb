@@ -68,7 +68,7 @@ module Api::V1::Accounts::Concerns::InboxHealthManagement
   private
 
   def fetch_health_data
-    return Whatsapp::HealthService.new(@inbox.channel).sync_health_status!(include_business_profile: true) if whatsapp_cloud_channel?
+    return @inbox.channel.health_service.sync_health_status!(include_business_profile: true) if whatsapp_cloud_channel?
 
     Twilio::HealthService.new(channel: @inbox.channel).perform
   end

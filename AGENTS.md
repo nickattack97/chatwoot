@@ -133,6 +133,11 @@ Things this fork does that upstream doesn't — check before assuming upstream b
   (each re-registers the WABA webhook to Chatwoot and hijacks Meta traffic off the engine).
   "Webhook URL mismatch" and "Configuration ID not configured" are expected, not bugs. Full
   detail + fixes in `DEPLOYMENT.md` → "WA-Bot-Engine integration (CBZ WhatsApp banking)".
+- **Numbers hosted at 360dialog** — a WhatsApp Cloud inbox with `provider_config['api_host'] = '360dialog'`
+  sends through 360dialog's waba-v2 API with `D360-API-KEY` (`Whatsapp::Providers::Dialog360CloudService`,
+  `Whatsapp::Dialog360HealthService`, URLs and headers in `Whatsapp::Dialog360CloudApi`); the Graph code paths are
+  untouched. Such inboxes never register or remove Meta's webhook and can't do calling. Any new Graph call for
+  WhatsApp Cloud needs its 360dialog counterpart there. Setup: `DEPLOYMENT.md` → "Numbers hosted at 360dialog".
 - **UC/Entra SAML SSO** with no native login fallback; `uc_sign_in` Rack::Attack throttles.
 - **Deployment** is `./deploy.sh` (rsync + docker build on the server). See
   `DEPLOYMENT.md`, especially "WA-Bot-Engine integration" for the inbox/webhook settings

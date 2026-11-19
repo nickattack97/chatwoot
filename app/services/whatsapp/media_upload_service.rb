@@ -39,7 +39,7 @@ class Whatsapp::MediaUploadService
 
     blob.open do |file|
       connection.post(upload_url) do |request|
-        request.headers['Authorization'] = "Bearer #{@whatsapp_channel.provider_config['api_key']}"
+        request.headers.update(auth_headers)
         request.body = {
           messaging_product: 'whatsapp',
           type: blob.content_type,
@@ -58,7 +58,15 @@ class Whatsapp::MediaUploadService
     end
   end
 
+  def auth_headers
+    return @whatsapp_channel.dialog360_cloud_api.auth_headers if @whatsapp_channel.dialog360_cloud_api?
+
+    { 'Authorization' => "Bearer #{@whatsapp_channel.provider_config['api_key']}" }
+  end
+
   def upload_url
+    return @whatsapp_channel.dialog360_cloud_api.media_upload_url if @whatsapp_channel.dialog360_cloud_api?
+
     base_path = ENV.fetch('WHATSAPP_CLOUD_BASE_URL', 'https://graph.facebook.com')
     version = GlobalConfigService.load('WHATSAPP_API_VERSION', WHATSAPP_API_VERSION_FALLBACK)
     "#{base_path}/#{version}/#{@whatsapp_channel.provider_config['phone_number_id']}/media"

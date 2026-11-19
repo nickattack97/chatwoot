@@ -8,13 +8,7 @@ class Whatsapp::BusinessProfileService
   end
 
   def fetch
-    response = HTTParty.get(
-      "#{BASE_URI}/#{@api_version}/#{@channel.provider_config['phone_number_id']}/whatsapp_business_profile",
-      query: {
-        fields: FIELDS.join(','),
-        access_token: @channel.provider_config['api_key']
-      }
-    )
+    response = request_profile
 
     unless response.success?
       log_error(response)
@@ -31,6 +25,21 @@ class Whatsapp::BusinessProfileService
   end
 
   private
+
+  def request_profile
+    if @channel.dialog360_cloud_api?
+      api = @channel.dialog360_cloud_api
+      return HTTParty.get(api.business_profile_url, headers: api.headers, query: { fields: FIELDS.join(',') })
+    end
+
+    HTTParty.get(
+      "#{BASE_URI}/#{@api_version}/#{@channel.provider_config['phone_number_id']}/whatsapp_business_profile",
+      query: {
+        fields: FIELDS.join(','),
+        access_token: @channel.provider_config['api_key']
+      }
+    )
+  end
 
   def log_error(response)
     parsed_response = response.parsed_response

@@ -455,4 +455,19 @@ describe Whatsapp::WebhookSetupService do
       end
     end
   end
+
+  describe 'a 360dialog-hosted number' do
+    let(:dialog360_channel) do
+      create(:channel_whatsapp, provider: 'whatsapp_cloud', provider_config: { 'api_host' => '360dialog' },
+                                validate_provider_config: false, sync_templates: false)
+    end
+
+    it 'refuses to register a webhook, which would take the number off the system that owns it' do
+      service = described_class.new(dialog360_channel)
+
+      expect { service.register_callback }.to raise_error(ArgumentError, 'Webhooks for 360dialog-hosted numbers are managed outside Chatwoot')
+      expect { service.perform }.to raise_error(ArgumentError, 'Webhooks for 360dialog-hosted numbers are managed outside Chatwoot')
+      expect(WebMock).not_to have_requested(:any, /graph\.facebook\.com/)
+    end
+  end
 end

@@ -37,6 +37,7 @@ class Channel::Whatsapp < ApplicationRecord
 
   validates :provider, inclusion: { in: PROVIDERS }
   validates :phone_number, presence: true, uniqueness: true
+  validate :validate_api_host
   validate :validate_provider_config
   validate :validate_app_secret, if: :app_secret_required?
 
@@ -67,11 +68,35 @@ class Channel::Whatsapp < ApplicationRecord
   # reachable by any whatsapp_cloud inbox, so 360dialog inboxes can't be toggled
   # on even though calling_enabled would persist.
   def voice_calling_supported?
-    provider == 'whatsapp_cloud'
+    provider == 'whatsapp_cloud' && !dialog360_cloud_api?
+  end
+
+  # A whatsapp_cloud inbox whose number is hosted at 360dialog: the same Cloud API bodies, sent to
+  # 360dialog's waba-v2 API with a D360-API-KEY instead of to Meta's Graph API with a bearer token.
+  # Meta's webhook for such a number is managed outside Chatwoot, so Chatwoot never registers or
+  # removes it, and calling (Graph-only) is unavailable.
+  def dialog360_cloud_api?
+    provider == 'whatsapp_cloud' && provider_config['api_host'] == Whatsapp::Dialog360CloudApi::API_HOST
+  end
+
+  def dialog360_cloud_api
+    Whatsapp::Dialog360CloudApi.new(self)
+  end
+
+  def health_service
+    dialog360_cloud_api? ? Whatsapp::Dialog360HealthService.new(self) : Whatsapp::HealthService.new(self)
+  end
+
+  # Where to download the bytes behind a media url the provider returned: Graph's url is fetched as
+  # is; a 360dialog one is re-hosted off Meta's CDN, or nil when it names any other host.
+  def media_download_url(url)
+    dialog360_cloud_api? ? dialog360_cloud_api.media_download_url(url) : url
   end
 
   def provider_service
-    if provider == 'whatsapp_cloud'
+    if dialog360_cloud_api?
+      Whatsapp::Providers::Dialog360CloudService.new(whatsapp_channel: self)
+    elsif provider == 'whatsapp_cloud'
       Whatsapp::Providers::WhatsappCloudService.new(whatsapp_channel: self)
     else
       Whatsapp::Providers::Whatsapp360DialogService.new(whatsapp_channel: self)
@@ -172,6 +197,14 @@ class Channel::Whatsapp < ApplicationRecord
                                          end
   end
 
+  def validate_api_host
+    api_host = provider_config['api_host']
+    return if api_host.blank?
+    return if provider == 'whatsapp_cloud' && api_host == Whatsapp::Dialog360CloudApi::API_HOST
+
+    errors.add(:provider_config, 'api_host must be 360dialog on a whatsapp_cloud channel')
+  end
+
   def validate_provider_config
     return if errors.any?
 
@@ -220,7 +253,7 @@ class Channel::Whatsapp < ApplicationRecord
     # Embedded signup and Manual V2 run webhook setup explicitly so their API
     # responses can reflect the real result instead of swallowing callback errors.
     explicitly_configured_sources = %w[embedded_signup manual_setup_v2]
-    provider == 'whatsapp_cloud' && explicitly_configured_sources.exclude?(provider_config['source'])
+    provider == 'whatsapp_cloud' && !dialog360_cloud_api? && explicitly_configured_sources.exclude?(provider_config['source'])
   end
 end
 

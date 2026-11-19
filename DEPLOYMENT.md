@@ -351,6 +351,44 @@ assume.
 | Inbox → CSAT | On, **created only after `FRONTEND_URL` is final** | The "rate us" button URL is baked into the approved template; a later sub-path move dead-ends it. Ratings then 301 to www.cbz.co.zw with no error anywhere. The API token cannot delete templates on this WABA, so each re-version leaves the old one in Business Manager. |
 | Automation "Mark Pending on Resolution" | Review | Labels every resolved conversation `pending-customer` — triage noise at scale. |
 
+#### Numbers hosted at 360dialog (`api_host: 360dialog`)
+
+WA-Bot-Engine reaches WhatsApp only through 360dialog, so agent
+replies must go through 360dialog too. A WhatsApp Cloud inbox with `provider_config['api_host'] =
+'360dialog'` does that: the same Cloud API bodies go to `https://waba-v2.360dialog.io` with the
+`D360-API-KEY` header, never to `graph.facebook.com` with a bearer token
+(`Whatsapp::Providers::Dialog360CloudService`, `Whatsapp::Dialog360CloudApi`). Messages, templates,
+media (upload and download), CSAT templates, contact-info requests, template sync and Account Health all
+follow it. The legacy `default` (360dialog) provider is a different, retired API — **never** create an
+inbox with it for these numbers: saving it re-registers the number's webhook to Chatwoot.
+
+Set the channel up from `rails runner` (saving checks the key against 360dialog and refuses it if the
+key belongs to another number):
+
+```ruby
+channel = Channel::Whatsapp.find_by!(phone_number: '+<number>')   # or create one, then its Inbox
+channel.update!(provider_config: channel.provider_config.merge(
+  'api_host' => '360dialog',
+  'api_key' => '<the number\'s 360dialog API key>',
+  'phone_number_id' => '<Meta phone-number id>',
+  'business_account_id' => '<WABA id>',
+  'source' => 'embedded_signup',
+  'app_secret' => '<= the engine\'s Chatwoot:ForwardSigningSecret>'
+))
+```
+
+| Setting | Why |
+|---|---|
+| `api_key` = the number's 360dialog key | 360dialog identifies the number from the key; no version or id goes in any path. |
+| `app_secret` = the engine's `Chatwoot:ForwardSigningSecret` | 360dialog doesn't sign with Meta's app secret, so this is a secret shared by the engine and Chatwoot: the engine signs each forward with it as `X-Hub-Signature-256`, and `source=embedded_signup` makes Chatwoot verify it (401 otherwise). |
+| `WHATSAPP_360DIALOG_CLOUD_BASE_URL` (optional) | Defaults to `https://waba-v2.360dialog.io`. |
+
+What these inboxes never do: register, re-register or remove Meta's webhook (auto-setup and delete
+teardown are skipped; **Register Webhook** returns an error), or offer WhatsApp calling (Graph only).
+Account Health shows the number's quality, tier and status from 360dialog's `/health_status`; the WABA
+name and business portfolio stay empty (360dialog has no endpoint for them). **Reconfigure** (embedded
+signup) is still a Meta OAuth flow that would overwrite these settings — still never click it.
+
 Operational notes: Puma runs single-mode (5 threads) unless `WEB_CONCURRENCY` is
 set — set `WEB_CONCURRENCY=4` before any real agent load. No database backup
 exists on the host as of 2026-08-28; the Postgres volume sits on the root LV.
