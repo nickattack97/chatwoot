@@ -51,10 +51,11 @@ case "${1:-}" in
     fi
 
     # Releases before the pipeline ran as root, so the existing uploads belong to root. Hand them to uid 1000 once.
+    # (busybox find in the image has neither -uid nor -quit: -user takes the numeric id, head stops at the first match.)
     volume="cbz-helpengine_storage_data"
     if docker volume inspect "$volume" >/dev/null 2>&1; then
       docker run --rm --user 0 --entrypoint sh -v "$volume:/s" "$image" -c \
-        'if [ -n "$(find /s ! -uid 1000 -print -quit)" ]; then echo "Handing $0 to uid 1000"; chown -R 1000:1000 /s; fi' "$volume"
+        'if [ -n "$(find /s ! -user 1000 | head -n 1)" ]; then echo "Handing $0 to uid 1000"; chown -R 1000:1000 /s; fi' "$volume"
     fi
 
     datastores="redis"
